@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>eToy Football · Real Clubs</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    background: #070b10; color: #e8eef5;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden; height: 100%; height: 100dvh; width: 100%;
+    touch-action: none; user-select: none;
+  }
+  #game-wrap { position: relative; width: 100%; height: 100%; max-height: 100dvh; }
+  canvas { display: block; width: 100%; height: 100%; background: #0d2818; }
+
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 15; pointer-events: none;
+    padding: max(6px, env(safe-area-inset-top)) 10px 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .scoreboard {
+    background: rgba(0,0,0,0.8); border-radius: 12px; padding: 5px 12px;
+    font-size: clamp(0.85rem, 2.2vw, 1.15rem); font-weight: 800;
+    border: 1px solid rgba(255,255,255,0.12);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .team-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+  .team-abbr { font-size: 0.75em; opacity: 0.9; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .timer-box {
+    background: rgba(0,0,0,0.8); border-radius: 12px; padding: 5px 11px;
+    font-size: clamp(0.8rem, 2vw, 1.05rem); font-weight: 700;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  #selected-info {
+    position: absolute; top: 42px; left: 10px;
+    background: rgba(0,0,0,0.75); border-radius: 8px; padding: 5px 9px;
+    font-size: 0.7rem; z-index: 15; pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.1); max-width: 170px; line-height: 1.35;
+  }
+  #commentary {
+    position: absolute; bottom: 38%; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.72); border-radius: 10px; padding: 8px 16px;
+    font-size: clamp(0.75rem, 2vw, 0.95rem); font-weight: 600;
+    z-index: 16; pointer-events: none; text-align: center;
+    max-width: 85%; opacity: 0; transition: opacity 0.3s;
+    border: 1px solid rgba(255,255,255,0.12); line-height: 1.3;
+  }
+  #commentary.show { opacity: 1; }
+  #goal-banner {
+    position: absolute; top: 28%; left: 50%; transform: translateX(-50%) scale(0.6);
+    font-size: clamp(1.8rem, 6vw, 3.2rem); font-weight: 900;
+    color: #ffd700; text-shadow: 0 0 20px rgba(255,200,0,0.8), 0 4px 12px #000;
+    z-index: 25; pointer-events: none; opacity: 0;
+    transition: opacity 0.25s, transform 0.35s cubic-bezier(0.2, 1.4, 0.3, 1);
+    letter-spacing: 0.06em;
+  }
+  #goal-banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
+
+  #controls { position: absolute; inset: 0; z-index: 20; pointer-events: none; display: none; }
+  #controls.active { display: block; }
+
+  #stick-zone {
+    position: absolute; left: 2%; bottom: 4%; width: 150px; height: 150px; pointer-events: auto;
+  }
+  #stick-base {
+    position: absolute; width: 110px; height: 110px; left: 20px; bottom: 20px;
+    border-radius: 50%; background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.28);
+  }
+  #stick-knob {
+    position: absolute; width: 48px; height: 48px; left: 51px; bottom: 51px;
+    border-radius: 50%; background: rgba(255,255,255,0.55);
+    border: 2px solid rgba(255,255,255,0.7); box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  }
+
+  #actions {
+    position: absolute; right: 2%; bottom: 3%; width: 200px; height: 200px; pointer-events: auto;
+  }
+  .ef-btn {
+    position: absolute; border-radius: 50%; border: 2.5px solid rgba(255,255,255,0.4);
+    color: #fff; font-weight: 800; font-size: 0.68rem;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; line-height: 1.1;
+    backdrop-filter: blur(6px); box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+  }
+  .ef-btn:active, .ef-btn.active { transform: scale(0.9); filter: brightness(1.15); }
+  #btn-shoot {
+    width: 72px; height: 72px; right: 8px; bottom: 55px;
+    background: rgba(220, 50, 50, 0.75); border-color: #f87171; font-size: 0.78rem;
+  }
+  #btn-pass {
+    width: 62px; height: 62px; right: 78px; bottom: 12px;
+    background: rgba(40, 120, 220, 0.75); border-color: #60a5fa;
+  }
+  #btn-through {
+    width: 54px; height: 54px; right: 12px; bottom: 135px;
+    background: rgba(20, 160, 140, 0.72); border-color: #2dd4bf; font-size: 0.58rem;
+  }
+  #btn-dash {
+    width: 54px; height: 54px; right: 85px; bottom: 85px;
+    background: rgba(230, 180, 30, 0.72); border-color: #fbbf24;
+  }
+  #btn-tackle {
+    width: 50px; height: 50px; right: 145px; bottom: 55px;
+    background: rgba(180, 60, 30, 0.72); border-color: #fb923c; font-size: 0.58rem;
+  }
+
+  .screen {
+    position: absolute; inset: 0;
+    background: linear-gradient(165deg, #0a1018 0%, #12203a 45%, #0a1018 100%);
+    z-index: 40; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 16px; overflow-y: auto;
+  }
+  .screen.hidden { display: none; }
+  h1 {
+    font-size: clamp(1.5rem, 4.5vw, 2.4rem); font-weight: 900;
+    background: linear-gradient(135deg, #00d4aa, #38bdf8);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 0.2rem; text-align: center;
+  }
+  .subtitle { color: #8b9bb4; margin-bottom: 1rem; text-align: center; font-size: 0.88rem; }
+  .panel {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px; padding: 0.9rem 1.1rem; width: 100%; max-width: 480px; margin-bottom: 0.75rem;
+  }
+  .panel h2 {
+    font-size: 0.8rem; color: #00d4aa; margin-bottom: 0.55rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .team-select { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; max-height: 200px; overflow-y: auto; }
+  .team-card {
+    padding: 8px 6px; border-radius: 10px; border: 2px solid transparent;
+    background: rgba(0,0,0,0.3); cursor: pointer; text-align: center;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .team-card.selected { border-color: #00d4aa; background: rgba(0,212,170,0.12); }
+  .team-card .swatch {
+    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.3);
+  }
+  .team-card .name { font-weight: 700; font-size: 0.78rem; text-align: left; }
+  .match-opts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .opt-chip {
+    padding: 7px 12px; border-radius: 18px; background: rgba(0,0,0,0.35);
+    border: 2px solid transparent; cursor: pointer; font-size: 0.78rem; font-weight: 600;
+  }
+  .opt-chip.selected { border-color: #00d4aa; background: rgba(0,212,170,0.15); }
+  .player-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 6px; max-height: 180px; overflow-y: auto;
+  }
+  .player-pick {
+    background: rgba(0,0,0,0.35); border: 2px solid transparent;
+    border-radius: 9px; padding: 6px 4px; cursor: pointer; text-align: center; font-size: 0.7rem;
+  }
+  .player-pick.selected { border-color: #00d4aa; background: rgba(0,212,170,0.15); }
+  .player-pick .p-name { font-weight: 700; margin-bottom: 1px; }
+  .player-pick .p-stats { color: #8b9bb4; font-size: 0.62rem; }
+  .player-pick .p-pos {
+    display: inline-block; background: rgba(255,255,255,0.1);
+    padding: 1px 4px; border-radius: 3px; font-size: 0.58rem; margin-top: 2px;
+  }
+  .btn {
+    padding: 11px 24px; font-size: 1rem; font-weight: 700; border: none;
+    border-radius: 11px; cursor: pointer;
+    background: linear-gradient(135deg, #00d4aa, #00b894); color: #0a0e14; margin-top: 0.35rem;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary {
+    background: rgba(255,255,255,0.08); color: #e8eef5;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  #result-score { font-size: 2.1rem; font-weight: 900; margin: 0.35rem 0 0.7rem; }
+  #sound-toggle {
+    position: absolute; top: max(6px, env(safe-area-inset-top)); right: 10px;
+    z-index: 50; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2);
+    color: #fff; border-radius: 8px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer;
+    pointer-events: auto;
+  }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game"></canvas>
+  <button id="sound-toggle">🔊 Sound</button>
+
+  <div id="hud" class="hidden">
+    <div class="scoreboard">
+      <span class="team-dot" id="home-dot"></span>
+      <span class="team-abbr" id="home-abbr">HOME</span>
+      <span id="score-home">0</span>
+      <span style="opacity:0.45">–</span>
+      <span id="score-away">0</span>
+      <span class="team-abbr" id="away-abbr">AWAY</span>
+      <span class="team-dot" id="away-dot"></span>
+    </div>
+    <div class="timer-box" id="timer">5:00</div>
+  </div>
+  <div id="selected-info" class="hidden"></div>
+  <div id="commentary"></div>
+  <div id="goal-banner">GOAL!</div>
+
+  <div id="controls">
+    <div id="stick-zone">
+      <div id="stick-base"></div>
+      <div id="stick-knob"></div>
+    </div>
+    <div id="actions">
+      <div class="ef-btn" id="btn-through">THROUGH</div>
+      <div class="ef-btn" id="btn-dash">DASH</div>
+      <div class="ef-btn" id="btn-tackle">TACKLE</div>
+      <div class="ef-btn" id="btn-pass">PASS</div>
+      <div class="ef-btn" id="btn-shoot">SHOOT</div>
+    </div>
+  </div>
+
+  <div id="menu-screen" class="screen">
+    <h1>eToy Football</h1>
+    <p class="subtitle">Real clubs · Commentary · Sounds · eFootball controls</p>
+    <div class="panel">
+      <h2>Your Club</h2>
+      <div class="team-select" id="team-select"></div>
+    </div>
+    <div class="panel">
+      <h2>Opponent</h2>
+      <div class="team-select" id="away-select"></div>
+    </div>
+    <div class="panel">
+      <h2>Match Length</h2>
+      <div class="match-opts" id="duration-opts">
+        <div class="opt-chip selected" data-val="180">3 min</div>
+        <div class="opt-chip" data-val="300">5 min</div>
+        <div class="opt-chip" data-val="480">8 min</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Team Size (incl. GK)</h2>
+      <div class="match-opts" id="size-opts">
+        <div class="opt-chip" data-val="5">5v5</div>
+        <div class="opt-chip selected" data-val="7">7v7</div>
+        <div class="opt-chip" data-val="11">11v11</div>
+      </div>
+    </div>
+    <button class="btn" id="btn-to-players">Next: Choose Players</button>
+  </div>
+
+  <div id="players-screen" class="screen hidden">
+    <h1>Select Squad</h1>
+    <p class="subtitle">Include at least 1 GK · Exact size required</p>
+    <div class="panel" style="max-width:520px">
+      <h2>Players <span id="pick-count" style="color:#8b9bb4;font-weight:400"></span></h2>
+      <div class="player-grid" id="player-grid"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-secondary" id="btn-back-menu">Back</button>
+      <button class="btn" id="btn-kickoff" disabled>Kick Off</button>
+    </div>
+  </div>
+
+  <div id="result-screen" class="screen hidden">
+    <h1 id="result-title">Full Time</h1>
+    <div id="result-score">0 – 0</div>
+    <p id="result-msg" class="subtitle"></p>
+    <button class="btn" id="btn-replay">Play Again</button>
+    <button class="btn btn-secondary" id="btn-menu" style="margin-top:8px">Main Menu</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   eToy Football — PHASE 1 FOUNDATION
+   Real clubs data → Event Bus → Config → Data Models → State Machine →
+   Save/Settings → Audio → Input → Camera → Match Engine → UI wiring
+   All existing gameplay values preserved exactly; only reorganized.
+   ===================================================================== */
+
+/* ---------- STATIC DATA (unchanged) ---------- */
+const TEAMS = [
+  { id:'mufc', name:'Man United', abbr:'MUN', primary:'#da291c', secondary:'#fbe122' },
+  { id:'liv',  name:'Liverpool', abbr:'LIV', primary:'#c8102e', secondary:'#00b2a9' },
+  { id:'mci',  name:'Man City', abbr:'MCI', primary:'#6cabdd', secondary:'#1c2c5b' },
+  { id:'ars',  name:'Arsenal', abbr:'ARS', primary:'#ef0107', secondary:'#063672' },
+  { id:'che',  name:'Chelsea', abbr:'CHE', primary:'#034694', secondary:'#dbA72a' },
+  { id:'tot',  name:'Tottenham', abbr:'TOT', primary:'#132257', secondary:'#ffffff' },
+  { id:'rma',  name:'Real Madrid', abbr:'RMA', primary:'#ffffff', secondary:'#00529f' },
+  { id:'bar',  name:'Barcelona', abbr:'BAR', primary:'#a50044', secondary:'#004d98' },
+  { id:'atm',  name:'Atletico', abbr:'ATM', primary:'#cb3524', secondary:'#272e61' },
+  { id:'bay',  name:'Bayern', abbr:'BAY', primary:'#dc052d', secondary:'#0066b2' },
+  { id:'bvb',  name:'Dortmund', abbr:'BVB', primary:'#fde100', secondary:'#000000' },
+  { id:'psg',  name:'PSG', abbr:'PSG', primary:'#004170', secondary:'#da291c' },
+  { id:'juv',  name:'Juventus', abbr:'JUV', primary:'#000000', secondary:'#ffffff' },
+  { id:'int',  name:'Inter', abbr:'INT', primary:'#010e80', secondary:'#000000' },
+  { id:'acm',  name:'AC Milan', abbr:'MIL', primary:'#fb090b', secondary:'#000000' },
+  { id:'aja',  name:'Ajax', abbr:'AJA', primary:'#d2122e', secondary:'#ffffff' },
+];
+
+const ALL_PLAYERS = [
+  { id:1,  name:'Alisson', pos:'GK', speed:55, power:50, tackle:70, skill:78 },
+  { id:2,  name:'Ederson', pos:'GK', speed:58, power:52, tackle:68, skill:80 },
+  { id:3,  name:'Courtois', pos:'GK', speed:52, power:48, tackle:72, skill:82 },
+  { id:4,  name:'Van Dijk', pos:'DF', speed:72, power:88, tackle:92, skill:78 },
+  { id:5,  name:'Saliba', pos:'DF', speed:74, power:82, tackle:88, skill:76 },
+  { id:6,  name:'Dias', pos:'DF', speed:70, power:84, tackle:90, skill:80 },
+  { id:7,  name:'Robertson', pos:'DF', speed:82, power:70, tackle:84, skill:80 },
+  { id:8,  name:'Walker', pos:'DF', speed:90, power:72, tackle:82, skill:74 },
+  { id:9,  name:'Rodri', pos:'MF', speed:70, power:78, tackle:88, skill:90 },
+  { id:10, name:'De Bruyne', pos:'MF', speed:76, power:86, tackle:70, skill:94 },
+  { id:11, name:'Bellingham', pos:'MF', speed:82, power:84, tackle:78, skill:90 },
+  { id:12, name:'Pedri', pos:'MF', speed:78, power:68, tackle:72, skill:92 },
+  { id:13, name:'Valverde', pos:'MF', speed:88, power:82, tackle:80, skill:86 },
+  { id:14, name:'Salah', pos:'FW', speed:92, power:86, tackle:48, skill:92 },
+  { id:15, name:'Haaland', pos:'FW', speed:90, power:96, tackle:45, skill:88 },
+  { id:16, name:'Vinicius', pos:'FW', speed:96, power:82, tackle:42, skill:93 },
+  { id:17, name:'Mbappe', pos:'FW', speed:97, power:88, tackle:40, skill:94 },
+  { id:18, name:'Saka', pos:'FW', speed:88, power:80, tackle:55, skill:88 },
+  { id:19, name:'Kane', pos:'FW', speed:78, power:92, tackle:50, skill:90 },
+  { id:20, name:'Odegaard', pos:'MF', speed:76, power:74, tackle:68, skill:91 },
+];
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+/* ---------- EVENT SYSTEM (Step 13) ----------
+   Lightweight pub/sub so future systems (fouls, cards, offside, stats,
+   competitions) can subscribe to match events without coupling to the
+   match engine internals. */
+const EventBus = (() => {
+  const listeners = Object.create(null);
+  return {
+    on(evt, fn) { (listeners[evt] || (listeners[evt] = [])).push(fn); return fn; },
+    off(evt, fn) { if (listeners[evt]) listeners[evt] = listeners[evt].filter(f => f !== fn); },
+    emit(evt, payload) {
+      const arr = listeners[evt];
+      if (!arr) return;
+      for (const fn of arr.slice()) {
+        try { fn(payload); } catch (err) { console.error(`[EventBus] handler for "${evt}" threw`, err); }
+      }
+    },
+  };
+})();
+
+/* ---------- CONFIGURATION (Step 4) ----------
+   Every tunable value used to be scattered inline as a magic number.
+   Behavior is unchanged — these are the exact original numbers, now
+   named and centralized so balancing is a config edit, not a code hunt. */
+const GAME_CONFIG = {
+  version: 1,
+  pitch: { w: 1280, h: 720, margin: 48 },
+  goal: { width: 140, depth: 22 },
+};
+const PITCH = GAME_CONFIG.pitch;
+const GOAL_W = GAME_CONFIG.goal.width;
+const GOAL_D = GAME_CONFIG.goal.depth;
+
+const MATCH_CONFIG = {
+  durations: [180, 300, 480],
+  defaultDuration: 180,
+  teamSizes: [5, 7, 11],
+  defaultTeamSize: 7,
+  goalResetDelayMs: 1400,
+  goalFlashFrames: 110,
+  goalBannerMs: 1600,
+  lateGameCommentWindow: [50, 60], // seconds remaining
+  lateGameCommentIntervalFrames: 900,
+};
+
+const PHYSICS_CONFIG = {
+  ballFriction: 0.988,
+  ballMinSpeed: 0.04,
+  wallBounceY: -0.7,
+  wallBounceX: -0.65,
+  ballSeparationFactor: 0.7,
+  ballImpactFactor: 0.82,
+  playerSeparationFactor: 0.5,
+  playerRadiusOverlap: 2,
+};
+
+const PLAYER_CONFIG = {
+  baseSpeedMin: 2.3,
+  speedScale: 2.4,
+  dashMultiplier: 1.5,
+  decelFactor: 0.78,
+  moveThreshold: 0.08,
+  shootRange: 24,
+  passRange: 26,
+  shootCooldown: 14,
+  passCooldown: 10,
+  tackleCooldown: 20,
+  tackleBaseRange: 30,
+  tackleRangeScale: 14,
+  tackleBaseChance: 0.4,
+  tackleChanceScale: 0.45,
+  tackleFailStun: 12,
+  tackleSuccessStunMin: 30,
+  tackleSuccessStunRand: 25,
+  gkRadius: 15,
+  fieldRadius: 13,
+};
+
+const AI_CONFIG = {
+  away: {
+    engageDist: 170, engageBallX: 580,
+    speedBase: 2.0, speedScale: 1.7,
+    shootRange: 18, shootPowerBase: 6.5, shootPowerScale: 3.5, shootCooldown: 16,
+    defendTargetX: 900, midTargetX: 700,
+  },
+  home: {
+    engageDist: 130,
+    speedBase: 1.9, speedScale: 1.5,
+    shootRange: 16, shootPowerBase: 6, shootPowerScale: 3, shootCooldown: 14,
+    shootChancePerDt: 0.035,
+    formationPullX: 0.12, formationPullY: 0.08,
+  },
+  gk: {
+    speedBase: 2.4, speedScale: 1.2,
+    dangerZone: 220, engageDist: 120, catchRange: 14,
+    releaseChancePerDt: 0.08, boxHalfHeightPad: 20,
+  },
+};
+
+const CONTROL_CONFIG = {
+  stickRadius: 42,
+  autoSwitchDist: 140,
+  autoSwitchMargin: 25,
+  autoSwitchCooldownMs: 600,
+};
+
+const AUDIO_CONFIG = {
+  voiceRate: 1.05,
+  voicePitch: 1.0,
+  voiceVolume: 0.85,
+};
+
+const UI_CONFIG = {
+  commentaryDefaultMs: 2800,
+};
+
+const SAVE_CONFIG = {
+  version: 1,
+  storageKey: 'etoyFootballSave',
+};
+
+const DEFAULT_SETTINGS = {
+  audio: { sfx: true, commentary: true, vibration: false },
+  difficulty: 'normal',
+  graphics: 'standard',
+  controlSensitivity: 1,
+};
+
+/* ---------- GAME STATE MACHINE (Step 3) ----------
+   Centralizes what used to be scattered booleans (state.running, screen
+   hidden/shown flags). Invalid transitions (e.g. jumping straight to
+   PLAYING without a valid squad) are rejected and logged. */
+const GameStates = Object.freeze({
+  MENU: 'MENU',
+  SQUAD_SELECTION: 'SQUAD_SELECTION',
+  PRE_MATCH: 'PRE_MATCH',
+  PLAYING: 'PLAYING',
+  PAUSED: 'PAUSED',
+  HALFTIME: 'HALFTIME',
+  FULL_TIME: 'FULL_TIME',
+  SETTINGS: 'SETTINGS',
+  TRAINING: 'TRAINING',
+});
+
+const ALLOWED_TRANSITIONS = {
+  [GameStates.MENU]: [GameStates.SQUAD_SELECTION, GameStates.SETTINGS],
+  [GameStates.SQUAD_SELECTION]: [GameStates.MENU, GameStates.PRE_MATCH],
+  [GameStates.PRE_MATCH]: [GameStates.PLAYING, GameStates.SQUAD_SELECTION],
+  [GameStates.PLAYING]: [GameStates.PAUSED, GameStates.HALFTIME, GameStates.FULL_TIME],
+  [GameStates.PAUSED]: [GameStates.PLAYING, GameStates.MENU],
+  [GameStates.HALFTIME]: [GameStates.PLAYING],
+  [GameStates.FULL_TIME]: [GameStates.MENU, GameStates.PRE_MATCH],
+  [GameStates.SETTINGS]: [GameStates.MENU],
+  [GameStates.TRAINING]: [GameStates.MENU],
+};
+
+class GameStateMachine {
+  constructor(initial) { this.current = initial; }
+  can(next) { return (ALLOWED_TRANSITIONS[this.current] || []).includes(next); }
+  transition(next, payload) {
+    if (!this.can(next)) {
+      console.warn(`[GameState] Rejected invalid transition: ${this.current} -> ${next}`);
+      return false;
+    }
+    const from = this.current;
+    this.current = next;
+    EventBus.emit('stateChange', { from, to: next, payload });
+    return true;
+  }
+  is(...states) { return states.includes(this.current); }
+}
+const Game = { state: new GameStateMachine(GameStates.MENU) };
+
+/* ---------- SAVE SYSTEM FOUNDATION (Step 11) ----------
+   Versioned, validated localStorage access. Corrupted or malformed data
+   is caught and ignored rather than crashing the game. Career mode /
+   progression data is not implemented yet — this only persists settings
+   for now, but the shape supports the future fields. */
+const SaveManager = {
+  _emptySave() {
+    return { version: SAVE_CONFIG.version, settings: {}, playerData: {}, teamData: {}, progression: {} };
+  },
+  save(partial) {
+    try {
+      const merged = { ...this._emptySave(), ...(this.load(true) || {}), ...partial, version: SAVE_CONFIG.version };
+      localStorage.setItem(SAVE_CONFIG.storageKey, JSON.stringify(merged));
+      return true;
+    } catch (err) {
+      console.error('[SaveManager] save failed', err);
+      return false;
+    }
+  },
+  load(silent) {
+    try {
+      const raw = localStorage.getItem(SAVE_CONFIG.storageKey);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!this.validate(data)) {
+        if (!silent) console.warn('[SaveManager] save data failed validation, ignoring');
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.error('[SaveManager] corrupted save data, ignoring', err);
+      return null;
+    }
+  },
+  validate(data) {
+    return !!data && typeof data === 'object' && typeof data.version === 'number' && data.version <= SAVE_CONFIG.version;
+  },
+  reset() {
+    try { localStorage.removeItem(SAVE_CONFIG.storageKey); return true; }
+    catch (err) { console.error('[SaveManager] reset failed', err); return false; }
+  },
+};
+
+/* ---------- SETTINGS FOUNDATION (Step 12) ---------- */
+const SettingsManager = {
+  current: { ...DEFAULT_SETTINGS, audio: { ...DEFAULT_SETTINGS.audio } },
+  load() {
+    const saved = SaveManager.load(true);
+    this.current = saved && saved.settings && Object.keys(saved.settings).length
+      ? { ...DEFAULT_SETTINGS, ...saved.settings, audio: { ...DEFAULT_SETTINGS.audio, ...(saved.settings.audio || {}) } }
+      : { ...DEFAULT_SETTINGS, audio: { ...DEFAULT_SETTINGS.audio } };
+    return this.current;
+  },
+  persist() { SaveManager.save({ settings: this.current }); },
+};
+
+/* ---------- DATA MODELS (Steps 5, 6, 7) ----------
+   Structured representations that don't yet drive every gameplay
+   calculation (existing speed/power/tackle/skill fields keep working
+   unchanged) but establish the shape that career/progression/tactics
+   systems will build on in later phases. */
+function buildPlayerProfile(base, teamId) {
+  return {
+    id: base.id, name: base.name, number: base.id, position: base.pos, teamId,
+    overall: Math.round((base.speed + base.power + base.tackle + base.skill) / 4),
+    pace: base.speed, acceleration: base.speed, shooting: base.power, passing: base.skill,
+    dribbling: base.skill, defending: base.tackle, tackling: base.tackle, strength: base.power,
+    stamina: 100, heading: base.power, reactions: base.skill, positioning: base.skill,
+    goalkeeping: base.pos === 'GK' ? base.tackle : 0, weakFoot: 3, skillRating: base.skill,
+    fitness: 100, form: 3, experience: 0, level: 1,
+  };
+}
+function buildTeamModel(teamDef) {
+  return {
+    id: teamDef.id, name: teamDef.name, shortName: teamDef.abbr, players: [],
+    formation: null, tactics: { mentality: 'balanced' },
+    teamColor: teamDef.primary, secondaryColor: teamDef.secondary,
+  };
+}
+function buildMatchModel() {
+  return {
+    matchId: null, homeTeam: null, awayTeam: null, homeScore: 0, awayScore: 0,
+    matchTime: 0, matchDuration: MATCH_CONFIG.defaultDuration, period: 1, status: 'idle',
+    selectedPlayer: null, events: [],
+    statistics: { shotsHome: 0, shotsAway: 0, passesHome: 0, passesAway: 0, tacklesHome: 0, tacklesAway: 0 },
+  };
+}
+const MAX_MATCH_EVENTS = 200; // Step 17: avoid unbounded growth in a long session
+function recordMatchEvent(type, data) {
+  if (!state.match) return;
+  state.match.events.push({ type, time: state.match.matchTime, ...data });
+  if (state.match.events.length > MAX_MATCH_EVENTS) state.match.events.shift();
+}
+EventBus.on('shot', ({ home }) => { if (state.match) state.match.statistics[home ? 'shotsHome' : 'shotsAway']++; recordMatchEvent('shot', { home }); });
+EventBus.on('pass', ({ home, through }) => { if (state.match) state.match.statistics[home ? 'passesHome' : 'passesAway']++; recordMatchEvent('pass', { home, through }); });
+EventBus.on('tackle', ({ home, success }) => { if (state.match) state.match.statistics[home ? 'tacklesHome' : 'tacklesAway']++; recordMatchEvent('tackle', { home, success }); });
+EventBus.on('goal', ({ home }) => { if (state.match) { state.match[home ? 'homeScore' : 'awayScore']++; } recordMatchEvent('goal', { home }); });
+
+/* ---------- ERROR SAFETY HELPERS (Step 18) ---------- */
+function isFiniteNum(n) { return typeof n === 'number' && isFinite(n); }
+function sanitizeEntity(e, fallbackX, fallbackY) {
+  if (!isFiniteNum(e.x) || !isFiniteNum(e.y)) { e.x = fallbackX; e.y = fallbackY; e.vx = 0; e.vy = 0; }
+  if (!isFiniteNum(e.vx) || !isFiniteNum(e.vy)) { e.vx = 0; e.vy = 0; }
+}
+
+/* ---------- RUNTIME STATE ----------
+   Kept as one object (as before) to avoid destabilizing every call site
+   in a single pass. keys/stick/buttons are now owned by InputManager —
+   state simply aliases them so all existing state.keys[...] references
+   keep working while input handling lives in one place (Step 10). */
+let state = {
+  homeTeam: TEAMS[0],
+  awayTeam: TEAMS[1],
+  duration: MATCH_CONFIG.defaultDuration,
+  teamSize: MATCH_CONFIG.defaultTeamSize,
+  selectedPlayerIds: [],
+  running: false,
+  timeLeft: MATCH_CONFIG.defaultDuration,
+  scoreHome: 0,
+  scoreAway: 0,
+  homePlayers: [],
+  awayPlayers: [],
+  ball: null,
+  controlledId: null,
+  keys: null, stick: null, buttons: null, // assigned from InputManager below
+  lastTime: 0,
+  goalFlash: 0,
+  soundOn: true,
+  lastAutoSwitch: 0,
+  commentTimer: 0,
+  match: null,
+};
+
+/* ---------- INPUT SYSTEM (Step 10) ----------
+   Separates raw device input (touch stick, buttons, keyboard) from what
+   gameplay code asks for. Gameplay reads InputManager.isShoot() etc.
+   instead of touching keyboard codes directly, so a future gamepad
+   binding only needs changes here. */
+const InputManager = {
+  keys: {},
+  stick: { active: false, dx: 0, dy: 0, ox: 0, oy: 0 },
+  buttons: { shoot: 0, pass: 0, through: 0, dash: 0, tackle: 0 },
+  moveVector() {
+    let dx = this.stick.dx, dy = this.stick.dy;
+    if (this.keys['KeyW'] || this.keys['ArrowUp']) dy = -1;
+    if (this.keys['KeyS'] || this.keys['ArrowDown']) dy = 1;
+    if (this.keys['KeyA'] || this.keys['ArrowLeft']) dx = -1;
+    if (this.keys['KeyD'] || this.keys['ArrowRight']) dx = 1;
+    return { dx, dy };
+  },
+  isDash() { return !!(this.buttons.dash || this.keys['ShiftLeft'] || this.keys['ShiftRight']); },
+  isShoot() { return !!(this.buttons.shoot || this.keys['Space']); },
+  isPass() { return !!(this.buttons.pass || this.keys['KeyQ']); },
+  isThrough() { return !!(this.buttons.through || this.keys['KeyE']); },
+  isTackle() { return !!(this.buttons.tackle || this.keys['KeyF']); },
+};
+state.keys = InputManager.keys;
+state.stick = InputManager.stick;
+state.buttons = InputManager.buttons;
+
+/* ---------- AUDIO FOUNDATION (Step 16) ----------
+   All Web Audio + speech-synthesis code lives behind this namespace.
+   Behavior/tones are unchanged from the original implementation. */
+const AudioManager = (() => {
+  let audioCtx = null;
+  function ensure() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { /* unsupported */ }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function playTone(freq, dur, type, vol, slideTo) {
+    if (!state.soundOn || !SettingsManager.current.audio.sfx) return;
+    const c = ensure();
+    if (!c) return;
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, c.currentTime);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, c.currentTime + dur);
+    gain.gain.setValueAtTime(vol || 0.15, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+    osc.connect(gain); gain.connect(c.destination);
+    osc.start(); osc.stop(c.currentTime + dur);
+  }
+  function noiseBurst(seconds, amp, envelopeExp, gainVal) {
+    if (!state.soundOn || !SettingsManager.current.audio.sfx) return;
+    const c = ensure();
+    if (!c) return;
+    const bufferSize = c.sampleRate * seconds;
+    const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * amp * (envelopeExp ? Math.exp(-i / (bufferSize * envelopeExp)) : 1);
+    }
+    const noise = c.createBufferSource();
+    noise.buffer = buffer;
+    const g = c.createGain();
+    g.gain.value = gainVal;
+    noise.connect(g); g.connect(c.destination);
+    noise.start();
+  }
+  return {
+    ensure,
+    kick() { playTone(120, 0.08, 'triangle', 0.2, 60); playTone(80, 0.12, 'sine', 0.12, 40); },
+    pass() { playTone(200, 0.06, 'sine', 0.12, 140); },
+    tackle() { playTone(90, 0.1, 'sawtooth', 0.1, 50); },
+    whistle() { playTone(880, 0.25, 'sine', 0.15); setTimeout(() => playTone(880, 0.15, 'sine', 0.12), 280); },
+    goal() {
+      playTone(440, 0.15, 'square', 0.12);
+      setTimeout(() => playTone(554, 0.15, 'square', 0.12), 120);
+      setTimeout(() => playTone(659, 0.2, 'square', 0.14), 240);
+      setTimeout(() => playTone(880, 0.35, 'sine', 0.16), 400);
+      noiseBurst(1.2, 0.08, 0.4, 0.35);
+    },
+    crowdLow() { noiseBurst(0.4, 0.03, 0, 0.2); },
+    speak(text) {
+      if (!(state.soundOn && SettingsManager.current.audio.commentary) || !window.speechSynthesis) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = AUDIO_CONFIG.voiceRate; u.pitch = AUDIO_CONFIG.voicePitch; u.volume = AUDIO_CONFIG.voiceVolume;
+        const voices = window.speechSynthesis.getVoices();
+        const en = voices.find(v => v.lang.startsWith('en') && /male|daniel|david|james/i.test(v.name))
+          || voices.find(v => v.lang.startsWith('en'));
+        if (en) u.voice = en;
+        window.speechSynthesis.speak(u);
+      } catch (e) { /* speech synthesis unsupported/blocked */ }
+    },
+    cancelSpeech() { if (window.speechSynthesis) window.speechSynthesis.cancel(); },
+  };
+})();
+
+/* ---------- COMMENTARY ---------- */
+const COMMENT_LINES = {
+  kickoff: ["And we're underway!", "The referee blows the whistle — kick off!", "Here we go, the match begins!"],
+  goalHome: ["GOAL! What a finish!", "It's in the back of the net!", "They score! The crowd goes wild!", "Brilliant strike! Goal!", "He's done it! Absolute scenes!"],
+  goalAway: ["Oh no, they've scored!", "Goal for the opposition!", "Conceded... that hurts.", "They find the net. Frustrating."],
+  nearMiss: ["Just wide!", "So close!", "That was nearly a goal!"],
+  goodPass: ["Lovely pass.", "Great vision there.", "Nice ball!"],
+  tackle: ["Strong challenge!", "Won the ball cleanly.", "Good defensive work."],
+  time: ["The clock is ticking.", "Time running out now.", "Final minutes approaching."],
+};
+let commentHideTimer = null;
+function showCommentary(text, ms = UI_CONFIG.commentaryDefaultMs) {
+  const el = document.getElementById('commentary');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(commentHideTimer);
+  commentHideTimer = setTimeout(() => el.classList.remove('show'), ms);
+  AudioManager.speak(text);
+}
+function randomLine(key) {
+  const arr = COMMENT_LINES[key];
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+document.getElementById('sound-toggle').onclick = () => {
+  state.soundOn = !state.soundOn;
+  document.getElementById('sound-toggle').textContent = state.soundOn ? '🔊 Sound' : '🔇 Muted';
+  if (state.soundOn) AudioManager.ensure(); else AudioManager.cancelSpeech();
+  SettingsManager.persist();
+};
+
+/* ---------- MENU / SQUAD SELECTION UI ---------- */
+function buildTeamSelect(elId, isHome) {
+  const el = document.getElementById(elId);
+  const current = isHome ? state.homeTeam : state.awayTeam;
+  el.innerHTML = TEAMS.map(t => `
+    <div class="team-card ${t.id===current.id?'selected':''}" data-id="${t.id}">
+      <div class="swatch" style="background:${t.primary};${t.primary==='#ffffff'?'border-color:#666':''}"></div>
+      <div class="name">${t.name}</div>
+    </div>`).join('');
+  el.querySelectorAll('.team-card').forEach(card => {
+    card.onclick = () => {
+      el.querySelectorAll('.team-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      const team = TEAMS.find(t => t.id === card.dataset.id);
+      if (isHome) {
+        state.homeTeam = team;
+        if (state.awayTeam.id === team.id) { state.awayTeam = TEAMS.find(t => t.id !== team.id); buildTeamSelect('away-select', false); }
+      } else {
+        state.awayTeam = team;
+        if (state.homeTeam.id === team.id) { state.homeTeam = TEAMS.find(t => t.id !== team.id); buildTeamSelect('team-select', true); }
+      }
+    };
+  });
+}
+function setupChips(id, key) {
+  document.getElementById(id).querySelectorAll('.opt-chip').forEach(chip => {
+    chip.onclick = () => {
+      document.getElementById(id).querySelectorAll('.opt-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      state[key] = parseInt(chip.dataset.val, 10);
+    };
+  });
+}
+function buildPlayerGrid() {
+  const grid = document.getElementById('player-grid');
+  const need = state.teamSize;
+  const gks = ALL_PLAYERS.filter(p => p.pos === 'GK');
+  const others = ALL_PLAYERS.filter(p => p.pos !== 'GK');
+  state.selectedPlayerIds = [gks[0].id, ...others.slice(0, need - 1).map(p => p.id)];
+  grid.innerHTML = ALL_PLAYERS.map(p => {
+    const sel = state.selectedPlayerIds.includes(p.id) ? 'selected' : '';
+    return `<div class="player-pick ${sel}" data-id="${p.id}">
+      <div class="p-name">${p.name}</div>
+      <div class="p-stats">⚡${p.speed} 💪${p.power}</div>
+      <span class="p-pos">${p.pos}</span>
+    </div>`;
+  }).join('');
+  updatePickCount();
+  grid.querySelectorAll('.player-pick').forEach(card => {
+    card.onclick = () => {
+      const id = parseInt(card.dataset.id, 10);
+      const idx = state.selectedPlayerIds.indexOf(id);
+      if (idx >= 0) { state.selectedPlayerIds.splice(idx, 1); card.classList.remove('selected'); }
+      else if (state.selectedPlayerIds.length < need) { state.selectedPlayerIds.push(id); card.classList.add('selected'); }
+      updatePickCount();
+    };
+  });
+}
+function updatePickCount() {
+  const need = state.teamSize;
+  const n = state.selectedPlayerIds.length;
+  const hasGK = state.selectedPlayerIds.some(id => ALL_PLAYERS.find(x => x.id === id)?.pos === 'GK');
+  document.getElementById('pick-count').textContent = `(${n}/${need})${hasGK ? '' : ' · need GK'}`;
+  document.getElementById('btn-kickoff').disabled = n !== need || !hasGK;
+}
+
+buildTeamSelect('team-select', true);
+buildTeamSelect('away-select', false);
+setupChips('duration-opts', 'duration');
+setupChips('size-opts', 'teamSize');
+
+document.getElementById('btn-to-players').onclick = () => {
+  AudioManager.ensure();
+  if (!Game.state.transition(GameStates.SQUAD_SELECTION)) return;
+  document.getElementById('menu-screen').classList.add('hidden');
+  document.getElementById('players-screen').classList.remove('hidden');
+  buildPlayerGrid();
+};
+document.getElementById('btn-back-menu').onclick = () => {
+  Game.state.transition(GameStates.MENU);
+  document.getElementById('players-screen').classList.add('hidden');
+  document.getElementById('menu-screen').classList.remove('hidden');
+};
+document.getElementById('btn-kickoff').onclick = () => {
+  const hasGK = state.selectedPlayerIds.some(id => ALL_PLAYERS.find(x => x.id === id)?.pos === 'GK');
+  if (state.selectedPlayerIds.length !== state.teamSize || !hasGK) return; // guard: invalid squad config
+  if (!Game.state.transition(GameStates.PRE_MATCH)) return;
+  startMatch();
+};
+document.getElementById('btn-replay').onclick = () => {
+  if (!Game.state.transition(GameStates.PRE_MATCH)) return;
+  document.getElementById('result-screen').classList.add('hidden');
+  startMatch();
+};
+document.getElementById('btn-menu').onclick = () => {
+  Game.state.transition(GameStates.MENU);
+  document.getElementById('result-screen').classList.add('hidden');
+  document.getElementById('menu-screen').classList.remove('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('controls').classList.remove('active');
+  document.getElementById('selected-info').classList.add('hidden');
+  state.running = false;
+  AudioManager.cancelSpeech();
+};
+
+/* ---------- Stick + buttons (touch/mouse -> InputManager) ---------- */
+const stickZone = document.getElementById('stick-zone');
+const stickKnob = document.getElementById('stick-knob');
+const STICK_R = CONTROL_CONFIG.stickRadius;
+function stickStart(e) {
+  e.preventDefault(); AudioManager.ensure();
+  const t = e.touches ? e.touches[0] : e;
+  const rect = stickZone.getBoundingClientRect();
+  InputManager.stick.active = true;
+  InputManager.stick.ox = rect.left + rect.width / 2;
+  InputManager.stick.oy = rect.top + rect.height / 2;
+  stickMove(e);
+}
+function stickMove(e) {
+  if (!InputManager.stick.active) return;
+  e.preventDefault();
+  const t = e.touches ? e.touches[0] : e;
+  let dx = t.clientX - InputManager.stick.ox, dy = t.clientY - InputManager.stick.oy;
+  const len = Math.hypot(dx, dy);
+  if (len > STICK_R) { dx = dx / len * STICK_R; dy = dy / len * STICK_R; }
+  InputManager.stick.dx = dx / STICK_R; InputManager.stick.dy = dy / STICK_R;
+  stickKnob.style.left = (51 + dx) + 'px';
+  stickKnob.style.bottom = (51 - dy) + 'px';
+}
+function stickEnd(e) {
+  e.preventDefault();
+  InputManager.stick.active = false; InputManager.stick.dx = 0; InputManager.stick.dy = 0;
+  stickKnob.style.left = '51px'; stickKnob.style.bottom = '51px';
+}
+stickZone.addEventListener('touchstart', stickStart, { passive: false });
+stickZone.addEventListener('touchmove', stickMove, { passive: false });
+stickZone.addEventListener('touchend', stickEnd, { passive: false });
+stickZone.addEventListener('touchcancel', stickEnd, { passive: false });
+stickZone.addEventListener('mousedown', stickStart);
+window.addEventListener('mousemove', stickMove);
+window.addEventListener('mouseup', stickEnd);
+
+function bindBtn(id, key) {
+  const el = document.getElementById(id);
+  const down = (e) => { e.preventDefault(); AudioManager.ensure(); InputManager.buttons[key] = 1; el.classList.add('active'); };
+  const up = (e) => { e.preventDefault(); InputManager.buttons[key] = 0; el.classList.remove('active'); };
+  el.addEventListener('touchstart', down, { passive: false });
+  el.addEventListener('touchend', up, { passive: false });
+  el.addEventListener('touchcancel', up, { passive: false });
+  el.addEventListener('mousedown', down);
+  el.addEventListener('mouseup', up);
+  el.addEventListener('mouseleave', up);
+}
+bindBtn('btn-shoot', 'shoot');
+bindBtn('btn-pass', 'pass');
+bindBtn('btn-through', 'through');
+bindBtn('btn-dash', 'dash');
+bindBtn('btn-tackle', 'tackle');
+
+window.addEventListener('keydown', e => {
+  InputManager.keys[e.code] = true;
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { InputManager.keys[e.code] = false; });
+
+/* ---------- CAMERA FOUNDATION (Step 15) ----------
+   Isolates the pitch-to-canvas fit calculation from drawing itself, so
+   future follow/zoom/broadcast cameras only need to change this. */
+const Camera = {
+  computeTransform() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const pitchAspect = PITCH.w / PITCH.h, canvasAspect = w / h;
+    let drawW, drawH, offX = 0, offY = 0;
+    if (canvasAspect > pitchAspect) { drawH = h; drawW = h * pitchAspect; offX = (w - drawW) / 2; }
+    else { drawW = w; drawH = w / pitchAspect; offY = (h - drawH) / 2; }
+    return { w, h, sx: drawW / PITCH.w, sy: drawH / PITCH.h, offX, offY };
+  },
+};
+
+function resize() {
+  const wrap = document.getElementById('game-wrap');
+  const r = wrap.getBoundingClientRect();
+  canvas.width = r.width * devicePixelRatio;
+  canvas.height = r.height * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+window.addEventListener('resize', resize);
+
+/* ---------- MATCH ENGINE FOUNDATION (Step 8) ---------- */
+function startMatch() {
+  AudioManager.ensure();
+  document.getElementById('players-screen').classList.add('hidden');
+  document.getElementById('result-screen').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('controls').classList.add('active');
+  document.getElementById('selected-info').classList.remove('hidden');
+  document.getElementById('home-dot').style.background = state.homeTeam.primary;
+  document.getElementById('away-dot').style.background = state.awayTeam.primary;
+  document.getElementById('home-abbr').textContent = state.homeTeam.abbr;
+  document.getElementById('away-abbr').textContent = state.awayTeam.abbr;
+  state.scoreHome = 0; state.scoreAway = 0;
+  state.timeLeft = state.duration; state.goalFlash = 0;
+  createTeams(); resetBall();
+  const field = state.homePlayers.find(p => !p.isGK) || state.homePlayers[0];
+  state.controlledId = field.id;
+
+  state.match = buildMatchModel();
+  state.match.matchId = `${state.homeTeam.id}-${state.awayTeam.id}-${Date.now()}`;
+  state.match.homeTeam = buildTeamModel(state.homeTeam);
+  state.match.awayTeam = buildTeamModel(state.awayTeam);
+  state.match.homeTeam.players = state.homePlayers.map(p => p.profile);
+  state.match.awayTeam.players = state.awayPlayers.map(p => p.profile);
+  state.match.matchDuration = state.duration;
+  state.match.status = 'playing';
+  state.match.selectedPlayer = state.controlledId;
+
+  updateHUD(); updateSelectedInfo(); resize();
+  state.running = true; state.lastTime = performance.now();
+  Game.state.transition(GameStates.PLAYING);
+  AudioManager.whistle();
+  showCommentary(randomLine('kickoff'), 2500);
+  requestAnimationFrame(loop);
+}
+
+function createTeams() {
+  const size = state.teamSize;
+  let homeData = state.selectedPlayerIds.map(id => ALL_PLAYERS.find(p => p.id === id));
+  homeData.sort((a, b) => (a.pos === 'GK' ? -1 : 1) - (b.pos === 'GK' ? -1 : 1));
+  const used = new Set(state.selectedPlayerIds);
+  let awayPool = ALL_PLAYERS.filter(p => !used.has(p.id));
+  const awayGK = awayPool.find(p => p.pos === 'GK') || ALL_PLAYERS.find(p => p.pos === 'GK');
+  awayPool = awayPool.filter(p => p.id !== awayGK.id);
+  const awayData = [awayGK, ...awayPool.slice(0, size - 1)];
+  const formH = formation(size, true);
+  const formA = formation(size, false);
+  state.homePlayers = homeData.map((p, i) => makePlayer(p, state.homeTeam, formH[i], true));
+  state.awayPlayers = awayData.map((p, i) => makePlayer(p, state.awayTeam, formA[i], false));
+}
+
+function formation(n, home) {
+  const gx = home ? PITCH.margin + 36 : PITCH.w - PITCH.margin - 36;
+  const positions = [{ x: gx, y: PITCH.h / 2 }];
+  const field = n - 1;
+  const side = home ? 1 : -1;
+  const baseX = home ? 320 : 960;
+  if (field <= 4) {
+    positions.push(
+      { x: baseX - side * 40, y: 200 }, { x: baseX - side * 40, y: 520 },
+      { x: baseX + side * 80, y: 280 }, { x: baseX + side * 80, y: 440 }
+    );
+  } else if (field <= 6) {
+    positions.push(
+      { x: baseX - side * 60, y: 160 }, { x: baseX - side * 60, y: 360 }, { x: baseX - side * 60, y: 560 },
+      { x: baseX + side * 50, y: 240 }, { x: baseX + side * 50, y: 480 }, { x: baseX + side * 140, y: 360 }
+    );
+  } else {
+    positions.push(
+      { x: baseX - side * 80, y: 140 }, { x: baseX - side * 80, y: 280 },
+      { x: baseX - side * 80, y: 440 }, { x: baseX - side * 80, y: 580 },
+      { x: baseX + side * 20, y: 200 }, { x: baseX + side * 20, y: 360 }, { x: baseX + side * 20, y: 520 },
+      { x: baseX + side * 120, y: 260 }, { x: baseX + side * 120, y: 460 }, { x: baseX + side * 200, y: 360 }
+    );
+  }
+  return positions.slice(0, n);
+}
+
+function makePlayer(data, team, pos, isHome) {
+  return {
+    id: data.id + (isHome ? 0 : 200), name: data.name, pos: data.pos,
+    speed: data.speed, power: data.power, tackle: data.tackle, skill: data.skill,
+    team, isHome, x: pos.x, y: pos.y, vx: 0, vy: 0,
+    r: data.pos === 'GK' ? PLAYER_CONFIG.gkRadius : PLAYER_CONFIG.fieldRadius,
+    facing: isHome ? 0 : Math.PI,
+    cooldown: 0, stunned: 0, isGK: data.pos === 'GK',
+    profile: buildPlayerProfile(data, team.id),
+  };
+}
+
+function resetBall() {
+  state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8 };
+  state.homePlayers.forEach((p, i) => {
+    const fp = formation(state.teamSize, true)[i];
+    p.x = fp.x; p.y = fp.y; p.vx = 0; p.vy = 0; p.stunned = 0;
+  });
+  state.awayPlayers.forEach((p, i) => {
+    const fp = formation(state.teamSize, false)[i];
+    p.x = fp.x; p.y = fp.y; p.vx = 0; p.vy = 0; p.stunned = 0;
+  });
+}
+
+function allPlayers() { return [...state.homePlayers, ...state.awayPlayers]; }
+function getControlled() {
+  return state.homePlayers.find(p => p.id === state.controlledId)
+    || state.homePlayers.find(p => !p.isGK) || state.homePlayers[0];
+}
+
+/* Auto-switch like eFootball: switch to closest when ball is far / lost (Step 14) */
+function autoSwitchIfNeeded() {
+  const now = performance.now();
+  if (now - state.lastAutoSwitch < CONTROL_CONFIG.autoSwitchCooldownMs) return;
+  const p = getControlled();
+  const ball = state.ball;
+  if (!p) return;
+  const dist = Math.hypot(p.x - ball.x, p.y - ball.y);
+  if (dist > CONTROL_CONFIG.autoSwitchDist) {
+    let best = p, bestD = dist;
+    for (const t of state.homePlayers) {
+      if (t.isGK && state.homePlayers.length > 1) continue;
+      const d = Math.hypot(t.x - ball.x, t.y - ball.y);
+      if (d < bestD - CONTROL_CONFIG.autoSwitchMargin) { bestD = d; best = t; }
+    }
+    if (best.id !== p.id) {
+      state.controlledId = best.id;
+      if (state.match) state.match.selectedPlayer = best.id;
+      state.lastAutoSwitch = now;
+      updateSelectedInfo();
+    }
+  }
+}
+
+function updateSelectedInfo() {
+  const p = getControlled();
+  if (!p) return;
+  document.getElementById('selected-info').innerHTML =
+    `<strong>${p.name}</strong> · ${p.pos}<br>⚡${p.speed} 💪${p.power} 🛡${p.tackle}`;
+}
+function updateHUD() {
+  document.getElementById('score-home').textContent = state.scoreHome;
+  document.getElementById('score-away').textContent = state.scoreAway;
+  const m = Math.floor(state.timeLeft / 60);
+  const s = Math.floor(state.timeLeft % 60).toString().padStart(2, '0');
+  document.getElementById('timer').textContent = `${m}:${s}`;
+}
+
+/* ---------- GAME LOOP ----------
+   requestAnimationFrame -> update(dt) -> input -> match engine -> physics
+   -> AI -> game state -> renderer. Delta time (Step 9) keeps gameplay
+   frame-rate independent, unchanged from the original clamp. */
+function loop(now) {
+  if (!state.running) return;
+  try {
+    const dt = Math.min((now - state.lastTime) / 16.67, 2.2);
+    state.lastTime = now;
+    state.timeLeft -= dt / 60;
+    if (state.match) state.match.matchTime = state.duration - state.timeLeft;
+    if (state.timeLeft <= 0) { state.timeLeft = 0; endMatch(); return; }
+    if (state.goalFlash > 0) state.goalFlash -= dt;
+    state.commentTimer += dt;
+    const [lo, hi] = MATCH_CONFIG.lateGameCommentWindow;
+    if (state.commentTimer > MATCH_CONFIG.lateGameCommentIntervalFrames && state.timeLeft < hi && state.timeLeft > lo) {
+      showCommentary(randomLine('time'), 2200);
+      state.commentTimer = 0;
+    }
+    updateHUD();
+    autoSwitchIfNeeded();
+    updateControlled(dt);
+    updateAI(dt);
+    updateBall(dt);
+    resolveCollisions();
+    sanitizeAllEntities(); // Step 18: guard against NaN/Infinity before render
+    checkGoals();
+    draw();
+  } catch (err) {
+    console.error('[GameLoop] error during frame, attempting to continue', err);
+  }
+  requestAnimationFrame(loop);
+}
+
+function sanitizeAllEntities() {
+  sanitizeEntity(state.ball, PITCH.w / 2, PITCH.h / 2);
+  for (const p of allPlayers()) sanitizeEntity(p, PITCH.w / 2, PITCH.h / 2);
+}
+
+function updateControlled(dt) {
+  const p = getControlled();
+  if (!p || p.stunned > 0) { if (p) p.stunned -= dt; return; }
+  const { dx, dy } = InputManager.moveVector();
+  const dash = InputManager.isDash();
+  const base = PLAYER_CONFIG.baseSpeedMin + (p.speed / 100) * PLAYER_CONFIG.speedScale;
+  const speed = dash ? base * PLAYER_CONFIG.dashMultiplier : base;
+  if (Math.abs(dx) > PLAYER_CONFIG.moveThreshold || Math.abs(dy) > PLAYER_CONFIG.moveThreshold) {
+    const len = Math.hypot(dx, dy) || 1;
+    p.vx = (dx / len) * speed; p.vy = (dy / len) * speed;
+    p.facing = Math.atan2(p.vy, p.vx);
+  } else { p.vx *= PLAYER_CONFIG.decelFactor; p.vy *= PLAYER_CONFIG.decelFactor; }
+  p.x += p.vx * dt; p.y += p.vy * dt;
+  clampPlayer(p);
+  if (p.cooldown > 0) p.cooldown -= dt;
+  if (InputManager.isShoot() && p.cooldown <= 0) doShoot(p, dash);
+  if (InputManager.isPass() && p.cooldown <= 0) doPass(p, false);
+  if (InputManager.isThrough() && p.cooldown <= 0) doPass(p, true);
+  if (InputManager.isTackle() && p.cooldown <= 0) doTackle(p);
+}
+
+function nearestTeammate(from) {
+  let best = null, bestScore = Infinity;
+  for (const p of state.homePlayers) {
+    if (p.id === from.id) continue;
+    const d = Math.hypot(p.x - from.x, p.y - from.y);
+    const toP = Math.atan2(p.y - from.y, p.x - from.x);
+    const align = Math.cos(toP - from.facing);
+    const score = d - align * 50;
+    if (score < bestScore) { bestScore = score; best = p; }
+  }
+  return best;
+}
+
+function doShoot(p, powerUp) {
+  const b = state.ball;
+  if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r + PLAYER_CONFIG.shootRange) return;
+  const goalX = PITCH.w - PITCH.margin;
+  const goalY = PITCH.h / 2 + (Math.random() - 0.5) * 50;
+  const ang = Math.atan2(goalY - p.y, goalX - p.x);
+  const power = (8.5 + p.power / 100 * 5.5) * (powerUp ? 1.3 : 1);
+  b.vx = Math.cos(ang) * power + p.vx * 0.25;
+  b.vy = Math.sin(ang) * power + p.vy * 0.25;
+  p.cooldown = PLAYER_CONFIG.shootCooldown;
+  AudioManager.kick();
+  EventBus.emit('shot', { home: p.isHome });
+}
+
+function doPass(p, through) {
+  const b = state.ball;
+  if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r + PLAYER_CONFIG.passRange) return;
+  const target = nearestTeammate(p);
+  if (!target) {
+    b.vx = Math.cos(p.facing) * 7; b.vy = Math.sin(p.facing) * 7;
+  } else {
+    let tx = target.x, ty = target.y;
+    if (through) {
+      tx += (p.isHome ? 70 : -70) + Math.cos(target.facing || 0) * 40;
+      ty += Math.sin(target.facing || 0) * 15;
+    }
+    const ang = Math.atan2(ty - p.y, tx - p.x);
+    const power = through ? 9 + p.skill / 100 * 3 : 6.5 + p.skill / 100 * 2.5;
+    b.vx = Math.cos(ang) * power; b.vy = Math.sin(ang) * power;
+    if (Math.random() < 0.35) showCommentary(randomLine('goodPass'), 1800);
+  }
+  p.cooldown = PLAYER_CONFIG.passCooldown;
+  AudioManager.pass();
+  EventBus.emit('pass', { home: p.isHome, through: !!through });
+}
+
+function doTackle(p) {
+  p.cooldown = PLAYER_CONFIG.tackleCooldown;
+  AudioManager.tackle();
+  const range = PLAYER_CONFIG.tackleBaseRange + p.tackle / 100 * PLAYER_CONFIG.tackleRangeScale;
+  for (const o of state.awayPlayers) {
+    if (Math.hypot(o.x - p.x, o.y - p.y) < range) {
+      const success = Math.random() < PLAYER_CONFIG.tackleBaseChance + p.tackle / 100 * PLAYER_CONFIG.tackleChanceScale;
+      if (success) {
+        o.stunned = PLAYER_CONFIG.tackleSuccessStunMin + Math.random() * PLAYER_CONFIG.tackleSuccessStunRand;
+        o.vx = (o.x - p.x) * 0.12; o.vy = (o.y - p.y) * 0.12;
+        if (Math.hypot(state.ball.x - o.x, state.ball.y - o.y) < 32) {
+          state.ball.vx = (p.x - o.x) * 0.1; state.ball.vy = (p.y - o.y) * 0.1;
+        }
+        if (Math.random() < 0.4) showCommentary(randomLine('tackle'), 1600);
+      } else p.stunned = PLAYER_CONFIG.tackleFailStun;
+      EventBus.emit('tackle', { home: p.isHome, success });
+      break;
+    }
+  }
+}
+
+function updateAI(dt) {
+  const ball = state.ball;
+  const A = AI_CONFIG.away;
+  for (const p of state.awayPlayers) {
+    if (p.stunned > 0) { p.stunned -= dt; p.vx *= 0.88; p.vy *= 0.88; continue; }
+    if (p.cooldown > 0) p.cooldown -= dt;
+    if (p.isGK) { updateGK(p, dt, false); continue; }
+    const distBall = Math.hypot(ball.x - p.x, ball.y - p.y);
+    let tx, ty;
+    if (distBall < A.engageDist || ball.x < A.engageBallX) { tx = ball.x; ty = ball.y; }
+    else if (p.pos === 'DF') { tx = A.defendTargetX; ty = ball.y * 0.5 + PITCH.h / 2 * 0.5; }
+    else { tx = A.midTargetX; ty = 180 + (p.id % 4) * 120; }
+    moveToward(p, tx, ty, A.speedBase + p.speed / 100 * A.speedScale, dt);
+    if (distBall < p.r + ball.r + A.shootRange && p.cooldown <= 0) {
+      const ang = Math.atan2(PITCH.h / 2 - p.y, 40 - p.x);
+      if (ball.x < p.x + 40) {
+        ball.vx = Math.cos(ang) * (A.shootPowerBase + p.power / 100 * A.shootPowerScale);
+        ball.vy = Math.sin(ang) * (A.shootPowerBase + p.power / 100 * A.shootPowerScale);
+        p.cooldown = A.shootCooldown; AudioManager.kick();
+        EventBus.emit('shot', { home: false });
+      }
+    }
+  }
+  const H = AI_CONFIG.home;
+  for (const p of state.homePlayers) {
+    if (p.id === state.controlledId) continue;
+    if (p.stunned > 0) { p.stunned -= dt; continue; }
+    if (p.cooldown > 0) p.cooldown -= dt;
+    if (p.isGK) { updateGK(p, dt, true); continue; }
+    const distBall = Math.hypot(ball.x - p.x, ball.y - p.y);
+    let tx, ty;
+    if (distBall < H.engageDist) { tx = ball.x; ty = ball.y; }
+    else {
+      const idx = state.homePlayers.indexOf(p);
+      const fp = formation(state.teamSize, true)[idx];
+      tx = fp.x + (ball.x - 640) * H.formationPullX; ty = fp.y + (ball.y - 360) * H.formationPullY;
+    }
+    moveToward(p, tx, ty, H.speedBase + p.speed / 100 * H.speedScale, dt);
+    if (distBall < p.r + ball.r + H.shootRange && p.cooldown <= 0 && Math.random() < H.shootChancePerDt * dt) {
+      const ang = Math.atan2(PITCH.h / 2 - p.y, 1200 - p.x);
+      ball.vx = Math.cos(ang) * (H.shootPowerBase + p.power / 100 * H.shootPowerScale);
+      ball.vy = Math.sin(ang) * (H.shootPowerBase + p.power / 100 * H.shootPowerScale);
+      p.cooldown = H.shootCooldown; AudioManager.kick();
+      EventBus.emit('shot', { home: true });
+    }
+  }
+}
+
+function updateGK(p, dt, isHome) {
+  const ball = state.ball;
+  const G = AI_CONFIG.gk;
+  const goalX = isHome ? PITCH.margin + 30 : PITCH.w - PITCH.margin - 30;
+  const distBall = Math.hypot(ball.x - p.x, ball.y - p.y);
+  let tx = goalX;
+  let ty = Math.max(PITCH.h / 2 - GOAL_W / 2 + G.boxHalfHeightPad, Math.min(PITCH.h / 2 + GOAL_W / 2 - G.boxHalfHeightPad, ball.y));
+  const danger = isHome ? ball.x < G.dangerZone : ball.x > PITCH.w - G.dangerZone;
+  if (danger && distBall < G.engageDist) { tx = ball.x; ty = ball.y; }
+  moveToward(p, tx, ty, G.speedBase + p.speed / 100 * G.speedScale, dt);
+  if (distBall < p.r + ball.r + G.catchRange) {
+    const towardGoal = isHome ? ball.vx < 0 : ball.vx > 0;
+    if (towardGoal || Math.hypot(ball.vx, ball.vy) < 3) {
+      ball.vx *= 0.15; ball.vy *= 0.15;
+      ball.x = p.x + (isHome ? 12 : -12); ball.y = p.y;
+      if (Math.random() < G.releaseChancePerDt * dt) {
+        const ang = isHome ? 0.3 + Math.random() * 0.6 : Math.PI - 0.3 - Math.random() * 0.6;
+        ball.vx = Math.cos(ang) * 8; ball.vy = Math.sin(ang) * 5;
+        AudioManager.pass();
+      }
+    }
+  }
+}
+
+function moveToward(p, tx, ty, spd, dt) {
+  const dx = tx - p.x, dy = ty - p.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  p.vx = (dx / dist) * spd; p.vy = (dy / dist) * spd;
+  p.facing = Math.atan2(p.vy, p.vx);
+  p.x += p.vx * dt; p.y += p.vy * dt;
+  clampPlayer(p);
+}
+function clampPlayer(p) {
+  p.x = Math.max(PITCH.margin + p.r, Math.min(PITCH.w - PITCH.margin - p.r, p.x));
+  p.y = Math.max(PITCH.margin + p.r, Math.min(PITCH.h - PITCH.margin - p.r, p.y));
+}
+
+function updateBall(dt) {
+  const b = state.ball;
+  b.vx *= PHYSICS_CONFIG.ballFriction; b.vy *= PHYSICS_CONFIG.ballFriction;
+  if (Math.hypot(b.vx, b.vy) < PHYSICS_CONFIG.ballMinSpeed) { b.vx = 0; b.vy = 0; }
+  b.x += b.vx * dt; b.y += b.vy * dt;
+  if (b.y < PITCH.margin + b.r) { b.y = PITCH.margin + b.r; b.vy *= PHYSICS_CONFIG.wallBounceY; }
+  if (b.y > PITCH.h - PITCH.margin - b.r) { b.y = PITCH.h - PITCH.margin - b.r; b.vy *= PHYSICS_CONFIG.wallBounceY; }
+  const gTop = PITCH.h / 2 - GOAL_W / 2, gBot = PITCH.h / 2 + GOAL_W / 2;
+  if (b.x < PITCH.margin + b.r && (b.y < gTop || b.y > gBot)) { b.x = PITCH.margin + b.r; b.vx *= PHYSICS_CONFIG.wallBounceX; }
+  if (b.x > PITCH.w - PITCH.margin - b.r && (b.y < gTop || b.y > gBot)) { b.x = PITCH.w - PITCH.margin - b.r; b.vx *= PHYSICS_CONFIG.wallBounceX; }
+}
+
+function resolveCollisions() {
+  const players = allPlayers(), b = state.ball;
+  for (const p of players) {
+    const dx = b.x - p.x, dy = b.y - p.y, dist = Math.hypot(dx, dy), minD = p.r + b.r;
+    if (dist < minD && dist > 0.1) {
+      const nx = dx / dist, ny = dy / dist;
+      b.x += nx * (minD - dist) * PHYSICS_CONFIG.ballSeparationFactor;
+      b.y += ny * (minD - dist) * PHYSICS_CONFIG.ballSeparationFactor;
+      const impact = (p.vx - b.vx) * nx + (p.vy - b.vy) * ny;
+      if (impact > 0) { b.vx += nx * impact * PHYSICS_CONFIG.ballImpactFactor; b.vy += ny * impact * PHYSICS_CONFIG.ballImpactFactor; }
+    }
+  }
+  for (let i = 0; i < players.length; i++) {
+    for (let j = i + 1; j < players.length; j++) {
+      const a = players[i], c = players[j];
+      const dx = c.x - a.x, dy = c.y - a.y, dist = Math.hypot(dx, dy), minD = a.r + c.r - PHYSICS_CONFIG.playerRadiusOverlap;
+      if (dist < minD && dist > 0.1) {
+        const nx = dx / dist, ny = dy / dist, push = (minD - dist) * PHYSICS_CONFIG.playerSeparationFactor;
+        a.x -= nx * push; a.y -= ny * push; c.x += nx * push; c.y += ny * push;
+      }
+    }
+  }
+}
+
+function checkGoals() {
+  if (state.goalFlash > 0) return;
+  const b = state.ball;
+  const gTop = PITCH.h / 2 - GOAL_W / 2, gBot = PITCH.h / 2 + GOAL_W / 2;
+  if (b.x > PITCH.w - PITCH.margin + 6 && b.y > gTop && b.y < gBot) {
+    state.scoreHome++; state.goalFlash = MATCH_CONFIG.goalFlashFrames; updateHUD();
+    EventBus.emit('goal', { home: true });
+    celebrateGoal(true);
+    setTimeout(resetBall, MATCH_CONFIG.goalResetDelayMs);
+  }
+  if (b.x < PITCH.margin - 6 && b.y > gTop && b.y < gBot) {
+    state.scoreAway++; state.goalFlash = MATCH_CONFIG.goalFlashFrames; updateHUD();
+    EventBus.emit('goal', { home: false });
+    celebrateGoal(false);
+    setTimeout(resetBall, MATCH_CONFIG.goalResetDelayMs);
+  }
+}
+
+function celebrateGoal(home) {
+  AudioManager.goal();
+  const banner = document.getElementById('goal-banner');
+  banner.textContent = home ? 'GOAL!' : 'GOAL...';
+  banner.style.color = home ? '#ffd700' : '#f87171';
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), MATCH_CONFIG.goalBannerMs);
+  showCommentary(home ? randomLine('goalHome') : randomLine('goalAway'), 3200);
+}
+
+function endMatch() {
+  state.running = false;
+  if (state.match) state.match.status = 'finished';
+  Game.state.transition(GameStates.FULL_TIME);
+  AudioManager.whistle();
+  document.getElementById('controls').classList.remove('active');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('selected-info').classList.add('hidden');
+  document.getElementById('commentary').classList.remove('show');
+  const rs = document.getElementById('result-screen');
+  rs.classList.remove('hidden');
+  let title, msg;
+  if (state.scoreHome > state.scoreAway) {
+    title = 'Victory!';
+    msg = `${state.homeTeam.name} win ${state.scoreHome}–${state.scoreAway}`;
+    showCommentary(`Full time! ${state.homeTeam.name} take the three points!`, 4000);
+  } else if (state.scoreHome < state.scoreAway) {
+    title = 'Defeat';
+    msg = `${state.awayTeam.name} win ${state.scoreAway}–${state.scoreHome}`;
+    showCommentary(`Full time. ${state.awayTeam.name} come out on top.`, 4000);
+  } else {
+    title = 'Draw';
+    msg = `Final score ${state.scoreHome}–${state.scoreAway}`;
+    showCommentary('Full time, and it ends all square.', 4000);
+  }
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-score').textContent = `${state.scoreHome} – ${state.scoreAway}`;
+  document.getElementById('result-msg').textContent = msg;
+}
+
+/* ---------- RENDERER ---------- */
+function draw() {
+  const { w, h, sx, sy, offX, offY } = Camera.computeTransform();
+  ctx.fillStyle = '#0a1620'; ctx.fillRect(0, 0, w, h);
+  ctx.save(); ctx.translate(offX, offY); ctx.scale(sx, sy);
+
+  const sky = ctx.createLinearGradient(0, 0, 0, PITCH.h);
+  sky.addColorStop(0, '#1a3555'); sky.addColorStop(0.28, '#1e4a32'); sky.addColorStop(1, '#163d28');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, PITCH.w, PITCH.h);
+  ctx.fillStyle = '#0d2a1a';
+  ctx.beginPath(); ctx.moveTo(0, 100);
+  for (let x = 0; x <= PITCH.w; x += 50) ctx.lineTo(x, 75 + Math.sin(x * 0.015) * 22);
+  ctx.lineTo(PITCH.w, 0); ctx.lineTo(0, 0); ctx.fill();
+  ctx.fillStyle = 'rgba(18,22,35,0.85)'; ctx.fillRect(0, 0, PITCH.w, 58);
+  ctx.fillStyle = 'rgba(45,55,75,0.5)';
+  for (let i = 0; i < 14; i++) ctx.fillRect(40 + i * 90, 12, 55, 32);
+
+  ctx.fillStyle = '#278a48';
+  ctx.fillRect(PITCH.margin - 4, PITCH.margin - 4, PITCH.w - 2 * PITCH.margin + 8, PITCH.h - 2 * PITCH.margin + 8);
+  const stripe = (PITCH.w - 2 * PITCH.margin) / 14;
+  for (let i = 0; i < 14; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#2d9450' : '#247a42';
+    ctx.fillRect(PITCH.margin + i * stripe, PITCH.margin, stripe, PITCH.h - 2 * PITCH.margin);
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)'; ctx.lineWidth = 3;
+  ctx.strokeRect(PITCH.margin, PITCH.margin, PITCH.w - 2 * PITCH.margin, PITCH.h - 2 * PITCH.margin);
+  ctx.beginPath(); ctx.moveTo(PITCH.w / 2, PITCH.margin); ctx.lineTo(PITCH.w / 2, PITCH.h - PITCH.margin); ctx.stroke();
+  ctx.beginPath(); ctx.arc(PITCH.w / 2, PITCH.h / 2, 80, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(PITCH.w / 2, PITCH.h / 2, 4, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+  const penW = 165, penH = 300;
+  ctx.strokeRect(PITCH.margin, PITCH.h / 2 - penH / 2, penW, penH);
+  ctx.strokeRect(PITCH.w - PITCH.margin - penW, PITCH.h / 2 - penH / 2, penW, penH);
+  const gaW = 65, gaH = 160;
+  ctx.strokeRect(PITCH.margin, PITCH.h / 2 - gaH / 2, gaW, gaH);
+  ctx.strokeRect(PITCH.w - PITCH.margin - gaW, PITCH.h / 2 - gaH / 2, gaW, gaH);
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  ctx.fillRect(PITCH.margin - GOAL_D, PITCH.h / 2 - GOAL_W / 2, GOAL_D, GOAL_W);
+  ctx.fillRect(PITCH.w - PITCH.margin, PITCH.h / 2 - GOAL_W / 2, GOAL_D, GOAL_W);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+  ctx.strokeRect(PITCH.margin - GOAL_D, PITCH.h / 2 - GOAL_W / 2, GOAL_D, GOAL_W);
+  ctx.strokeRect(PITCH.w - PITCH.margin, PITCH.h / 2 - GOAL_W / 2, GOAL_D, GOAL_W);
+
+  if (state.goalFlash > 0) {
+    ctx.fillStyle = `rgba(255,215,40,${Math.min(0.35, state.goalFlash / 100)})`;
+    ctx.fillRect(0, 0, PITCH.w, PITCH.h);
+  }
+  const sorted = allPlayers().slice().sort((a, b) => a.y - b.y);
+  for (const p of sorted) drawPlayer(p);
+  drawBall();
+  ctx.restore();
+}
+
+function drawPlayer(p) {
+  const controlled = p.id === state.controlledId;
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.beginPath(); ctx.ellipse(p.x + 1, p.y + 9, 11, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1e1e2e';
+  ctx.fillRect(p.x - 6, p.y + 1, 4.5, 10); ctx.fillRect(p.x + 1.5, p.y + 1, 4.5, 10);
+  const g = ctx.createLinearGradient(p.x - 9, p.y - 11, p.x + 9, p.y + 6);
+  g.addColorStop(0, lighten(p.team.primary, 28)); g.addColorStop(1, p.team.primary);
+  ctx.fillStyle = g; roundRect(p.x - 9, p.y - 11, 18, 16, 5); ctx.fill();
+  ctx.fillStyle = p.team.secondary === '#ffffff' ? '#ddd' : p.team.secondary;
+  ctx.fillRect(p.x - 2.5, p.y - 7, 5, 9);
+  if (p.isGK) {
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(p.x - 11, p.y - 2, 4, 5); ctx.fillRect(p.x + 7, p.y - 2, 4, 5);
+  }
+  const hg = ctx.createRadialGradient(p.x - 2, p.y - 17, 1, p.x, p.y - 15, 8);
+  hg.addColorStop(0, '#fde68a'); hg.addColorStop(1, '#b45309');
+  ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(p.x, p.y - 15, 7.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(p.x - 2.2, p.y - 16, 1.3, 0, Math.PI * 2);
+  ctx.arc(p.x + 2.2, p.y - 16, 1.3, 0, Math.PI * 2); ctx.fill();
+  if (controlled) {
+    ctx.strokeStyle = '#00e5b0'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y - 3, 16, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (p.isGK) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center'; ctx.fillText('GK', p.x, p.y + 18); ctx.textAlign = 'left';
+  }
+  if (p.stunned > 0) {
+    ctx.fillStyle = '#fbbf24'; ctx.font = '11px sans-serif'; ctx.fillText('z', p.x - 4, p.y - 26);
+  }
+}
+function drawBall() {
+  const b = state.ball;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(b.x + 1, b.y + 5, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  const g = ctx.createRadialGradient(b.x - 2, b.y - 2, 1, b.x, b.y, b.r);
+  g.addColorStop(0, '#fff'); g.addColorStop(0.75, '#e2e2e2'); g.addColorStop(1, '#aaa');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(b.x, b.y - 1.5, 2.5, 0, Math.PI * 2); ctx.fill();
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function lighten(hex, amt) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgb(${Math.min(255,(n>>16)+amt)},${Math.min(255,((n>>8)&255)+amt)},${Math.min(255,(n&255)+amt)})`;
+}
+
+/* ---------- INIT ---------- */
+SettingsManager.load();
+resize();
+if (window.speechSynthesis) window.speechSynthesis.getVoices();
+</script>
+</body>
+</html>
