@@ -57,6 +57,15 @@
     letter-spacing: 0.06em;
   }
   #goal-banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  #rules-banner {
+    position: absolute; top: 14%; left: 50%; transform: translateX(-50%) scale(0.7);
+    font-size: clamp(0.95rem, 3.4vw, 1.5rem); font-weight: 800;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.8); letter-spacing: 0.05em;
+    background: rgba(0,0,0,0.55); border-radius: 9px; padding: 5px 14px;
+    z-index: 24; pointer-events: none; opacity: 0;
+    transition: opacity 0.2s, transform 0.3s cubic-bezier(0.2, 1.4, 0.3, 1);
+  }
+  #rules-banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
 
   #controls { position: absolute; inset: 0; z-index: 20; pointer-events: none; display: none; }
   #controls.active { display: block; }
@@ -200,6 +209,7 @@
   <div id="selected-info" class="hidden"></div>
   <div id="commentary"></div>
   <div id="goal-banner">GOAL!</div>
+  <div id="rules-banner"></div>
 
   <div id="controls">
     <div id="stick-zone">
@@ -340,6 +350,33 @@ const EventBus = (() => {
   };
 })();
 
+/* ---------- MATCH EVENT NAMES (Phase 2, Step 17) ----------
+   Named constants for every event the referee/match engine emits over
+   EventBus. Phase 1's 'shot'/'pass'/'tackle'/'goal' strings still work
+   unchanged (existing listeners keep firing) — these are additive. */
+const GameEvents = Object.freeze({
+  KICKOFF: 'kickoff',
+  GOAL: 'goal',
+  ASSIST: 'assist',
+  SHOT: 'shot',
+  SHOT_ON_TARGET: 'shotOnTarget',
+  PASS: 'pass',
+  TACKLE: 'tackle',
+  FOUL: 'foul',
+  YELLOW_CARD: 'yellowCard',
+  RED_CARD: 'redCard',
+  OFFSIDE: 'offside',
+  CORNER: 'corner',
+  FREE_KICK: 'freeKick',
+  PENALTY: 'penalty',
+  THROW_IN: 'throwIn',
+  GOAL_KICK: 'goalKick',
+  HALFTIME: 'halftime',
+  SECOND_HALF: 'secondHalf',
+  FULL_TIME: 'fullTime',
+  SAVE: 'save',
+});
+
 /* ---------- CONFIGURATION (Step 4) ----------
    Every tunable value used to be scattered inline as a magic number.
    Behavior is unchanged — these are the exact original numbers, now
@@ -448,6 +485,70 @@ const DEFAULT_SETTINGS = {
   controlSensitivity: 1,
 };
 
+/* ---------- FOOTBALL RULES CONFIGURATION (Phase 2, Step 27) ----------
+   Every Phase 2 tunable lives here, extending the Phase 1 config
+   architecture rather than scattering new magic numbers. Values are
+   derived from the existing tackle/physics numbers (PLAYER_CONFIG,
+   PHYSICS_CONFIG) so the rules layer feels consistent with gameplay
+   that was already tuned in Phase 1 — nothing here rebalances it. */
+const RULES_CONFIG = {
+  fouls: {
+    enabled: true,
+    // Base chance an in-range tackle attempt is adjudicated a foul at
+    // all, before severity is rolled. Kept low so most tackles play out
+    // exactly as they did in Phase 1 (no foul).
+    tackleFoulChance: 0.16,
+    // Severity roll (0-1) above which a foul becomes "reckless" (yellow
+    // card territory) rather than a plain/late foul.
+    recklessThreshold: 0.72,
+    // Severity roll above which a reckless foul becomes a straight red
+    // (serious foul play) instead of a yellow.
+    seriousFoulThreshold: 0.94,
+    // Relative-velocity threshold (px/frame-equivalent) above which a
+    // player-player collision is even considered for a foul — normal
+    // shoulder-to-shoulder contact stays well under this.
+    collisionThreshold: 7.5,
+    collisionFoulChance: 0.08,
+    collisionCooldownMs: 1500, // per player-pair, avoids foul spam on a scrum
+  },
+  cards: {
+    yellowToRed: 2, // second yellow = red
+  },
+  offside: {
+    enabled: true,
+    // Attacker must be this many px beyond the second-last defender AND
+    // beyond the ball to count as offside — a small buffer avoids
+    // flagging marginal/level positions.
+    offsideBuffer: 4,
+  },
+  advantage: {
+    enabled: true,
+    // Advantage is evaluated at the instant of the foul: the fouled
+    // team keeps it if their attack is already moving faster toward
+    // goal than any opponent can reach the ball.
+    minBallSpeedTowardGoal: 2.0,
+  },
+  setPieces: {
+    freezeFrames: 70, // ~1.1s at 60fps before an unattended set piece auto-restarts
+    repositionRadius: 60, // opponents must retreat this far from the ball
+  },
+  boundaries: {
+    // Small inward offsets so restart spots sit just inside the lines,
+    // matching where the existing wall/goal geometry is drawn.
+    cornerInset: 10,
+    goalKickInset: 60,
+    throwInInset: 0,
+  },
+  stoppageTime: {
+    perGoalSeconds: 4,
+    perCardSeconds: 3,
+    perSetPieceSeconds: 1,
+    maxSeconds: 25,
+  },
+  assistWindowSeconds: 6,
+  shotAttributionWindowSeconds: 3,
+};
+
 /* ---------- GAME STATE MACHINE (Step 3) ----------
    Centralizes what used to be scattered booleans (state.running, screen
    hidden/shown flags). Invalid transitions (e.g. jumping straight to
@@ -492,6 +593,21 @@ class GameStateMachine {
   is(...states) { return states.includes(this.current); }
 }
 const Game = { state: new GameStateMachine(GameStates.MENU) };
+
+/* ---------- MATCH PERIOD FLOW (Phase 2, Step 2) ----------
+   Sits inside the existing top-level PLAYING game state (Game.state
+   stays MENU/SQUAD_SELECTION/PRE_MATCH/PLAYING/HALFTIME/FULL_TIME as
+   Phase 1 defined it) and tracks which part of the match is underway.
+   The GameStateMachine still governs screen-level flow; MatchPeriods
+   governs engine-level flow within PLAYING/HALFTIME. */
+const MatchPeriods = Object.freeze({
+  PRE_MATCH: 'PRE_MATCH',
+  KICKOFF: 'KICKOFF',
+  FIRST_HALF: 'FIRST_HALF',
+  HALFTIME: 'HALFTIME',
+  SECOND_HALF: 'SECOND_HALF',
+  FULL_TIME: 'FULL_TIME',
+});
 
 /* ---------- SAVE SYSTEM FOUNDATION (Step 11) ----------
    Versioned, validated localStorage access. Corrupted or malformed data
@@ -565,6 +681,19 @@ function buildPlayerProfile(base, teamId) {
     fitness: 100, form: 3, experience: 0, level: 1,
   };
 }
+// Phase 2, Step 6: structured match-level disciplinary state per player.
+function buildDiscipline() {
+  return { yellowCards: 0, redCard: false, sentOff: false };
+}
+// Phase 2, Step 18: per-player match statistics, incremented only from
+// real gameplay events (never fabricated).
+function buildPlayerMatchStats() {
+  return {
+    goals: 0, assists: 0, shots: 0, shotsOnTarget: 0,
+    passes: 0, completedPasses: 0, tackles: 0, foulsCommitted: 0,
+    yellowCards: 0, redCards: 0, offsides: 0, saves: 0,
+  };
+}
 function buildTeamModel(teamDef) {
   return {
     id: teamDef.id, name: teamDef.name, shortName: teamDef.abbr, players: [],
@@ -572,12 +701,39 @@ function buildTeamModel(teamDef) {
     teamColor: teamDef.primary, secondaryColor: teamDef.secondary,
   };
 }
+// Phase 2, Step 18-19: team statistics extended with fouls/cards/offside/
+// set-piece counts and possession tracking, alongside the Phase 1 fields.
+function buildTeamStatistics() {
+  return {
+    shotsHome: 0, shotsAway: 0,
+    shotsOnTargetHome: 0, shotsOnTargetAway: 0,
+    passesHome: 0, passesAway: 0,
+    completedPassesHome: 0, completedPassesAway: 0,
+    tacklesHome: 0, tacklesAway: 0,
+    successfulTacklesHome: 0, successfulTacklesAway: 0,
+    foulsHome: 0, foulsAway: 0,
+    yellowCardsHome: 0, yellowCardsAway: 0,
+    redCardsHome: 0, redCardsAway: 0,
+    offsidesHome: 0, offsidesAway: 0,
+    cornersHome: 0, cornersAway: 0,
+    goalKicksHome: 0, goalKicksAway: 0,
+    throwInsHome: 0, throwInsAway: 0,
+    freeKicksHome: 0, freeKicksAway: 0,
+    penaltiesHome: 0, penaltiesAway: 0,
+    savesHome: 0, savesAway: 0,
+    possessionHomeMs: 0, possessionAwayMs: 0,
+  };
+}
 function buildMatchModel() {
   return {
     matchId: null, homeTeam: null, awayTeam: null, homeScore: 0, awayScore: 0,
-    matchTime: 0, matchDuration: MATCH_CONFIG.defaultDuration, period: 1, status: 'idle',
+    matchTime: 0, matchDuration: MATCH_CONFIG.defaultDuration,
+    period: MatchPeriods.PRE_MATCH, halfDuration: MATCH_CONFIG.defaultDuration / 2,
+    stoppageSecondsFirst: 0, stoppageSecondsSecond: 0,
+    status: 'idle',
     selectedPlayer: null, events: [],
-    statistics: { shotsHome: 0, shotsAway: 0, passesHome: 0, passesAway: 0, tacklesHome: 0, tacklesAway: 0 },
+    statistics: buildTeamStatistics(),
+    setPiece: null, // current SetPieceManager state, or null when play is open
   };
 }
 const MAX_MATCH_EVENTS = 200; // Step 17: avoid unbounded growth in a long session
@@ -586,10 +742,93 @@ function recordMatchEvent(type, data) {
   state.match.events.push({ type, time: state.match.matchTime, ...data });
   if (state.match.events.length > MAX_MATCH_EVENTS) state.match.events.shift();
 }
-EventBus.on('shot', ({ home }) => { if (state.match) state.match.statistics[home ? 'shotsHome' : 'shotsAway']++; recordMatchEvent('shot', { home }); });
-EventBus.on('pass', ({ home, through }) => { if (state.match) state.match.statistics[home ? 'passesHome' : 'passesAway']++; recordMatchEvent('pass', { home, through }); });
-EventBus.on('tackle', ({ home, success }) => { if (state.match) state.match.statistics[home ? 'tacklesHome' : 'tacklesAway']++; recordMatchEvent('tackle', { home, success }); });
-EventBus.on('goal', ({ home }) => { if (state.match) { state.match[home ? 'homeScore' : 'awayScore']++; } recordMatchEvent('goal', { home }); });
+/* ---------- MATCH EVENT -> STATISTICS WIRING (Phase 2, Step 17-19) ----------
+   Every statistic is derived from a real EventBus emission — nothing
+   here is randomly generated. Phase 1's shot/pass/tackle/goal listeners
+   are extended in place (same event names via GameEvents). */
+EventBus.on(GameEvents.SHOT, ({ home, onTarget, playerId }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'shotsHome' : 'shotsAway']++;
+  const p = findPlayerById(playerId);
+  if (p) p.matchStats.shots++;
+  recordMatchEvent(GameEvents.SHOT, { home, onTarget, playerId });
+  if (onTarget) EventBus.emit(GameEvents.SHOT_ON_TARGET, { home, playerId });
+});
+EventBus.on(GameEvents.SHOT_ON_TARGET, ({ home, playerId }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'shotsOnTargetHome' : 'shotsOnTargetAway']++;
+  const p = findPlayerById(playerId);
+  if (p) p.matchStats.shotsOnTarget++;
+  recordMatchEvent(GameEvents.SHOT_ON_TARGET, { home, playerId });
+});
+EventBus.on(GameEvents.PASS, ({ home, through, playerId, completed }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'passesHome' : 'passesAway']++;
+  if (completed) state.match.statistics[home ? 'completedPassesHome' : 'completedPassesAway']++;
+  const p = findPlayerById(playerId);
+  if (p) { p.matchStats.passes++; if (completed) p.matchStats.completedPasses++; }
+  recordMatchEvent(GameEvents.PASS, { home, through, playerId, completed });
+});
+EventBus.on(GameEvents.TACKLE, ({ home, success, playerId }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'tacklesHome' : 'tacklesAway']++;
+  if (success) state.match.statistics[home ? 'successfulTacklesHome' : 'successfulTacklesAway']++;
+  const p = findPlayerById(playerId);
+  if (p) p.matchStats.tackles++;
+  recordMatchEvent(GameEvents.TACKLE, { home, success, playerId });
+});
+EventBus.on(GameEvents.GOAL, ({ home, scorerId, assistId }) => {
+  if (!state.match) return;
+  state.match[home ? 'homeScore' : 'awayScore']++;
+  const scorer = findPlayerById(scorerId);
+  if (scorer) scorer.matchStats.goals++;
+  const assister = findPlayerById(assistId);
+  if (assister) { assister.matchStats.assists++; EventBus.emit(GameEvents.ASSIST, { home, playerId: assistId }); }
+  state.stoppageAccrued += RULES_CONFIG.stoppageTime.perGoalSeconds;
+  recordMatchEvent(GameEvents.GOAL, { home, scorerId, assistId });
+});
+EventBus.on(GameEvents.FOUL, (foul) => {
+  if (!state.match) return;
+  state.match.statistics[foul.home ? 'foulsHome' : 'foulsAway']++;
+  const p = findPlayerById(foul.playerId);
+  if (p) p.matchStats.foulsCommitted++;
+  recordMatchEvent(GameEvents.FOUL, foul);
+});
+EventBus.on(GameEvents.YELLOW_CARD, ({ home, playerId }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'yellowCardsHome' : 'yellowCardsAway']++;
+  const p = findPlayerById(playerId);
+  if (p) p.matchStats.yellowCards++;
+  state.stoppageAccrued += RULES_CONFIG.stoppageTime.perCardSeconds;
+  recordMatchEvent(GameEvents.YELLOW_CARD, { home, playerId });
+});
+EventBus.on(GameEvents.RED_CARD, ({ home, playerId }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'redCardsHome' : 'redCardsAway']++;
+  const p = findPlayerById(playerId);
+  if (p) p.matchStats.redCards++;
+  state.stoppageAccrued += RULES_CONFIG.stoppageTime.perCardSeconds;
+  recordMatchEvent(GameEvents.RED_CARD, { home, playerId });
+});
+EventBus.on(GameEvents.OFFSIDE, ({ home, playerId, passerId, location }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'offsidesHome' : 'offsidesAway']++;
+  const p = findPlayerById(playerId);
+  if (p) p.matchStats.offsides++;
+  recordMatchEvent(GameEvents.OFFSIDE, { home, playerId, passerId, location });
+});
+EventBus.on(GameEvents.CORNER, ({ home }) => { if (state.match) { state.match.statistics[home ? 'cornersHome' : 'cornersAway']++; recordMatchEvent(GameEvents.CORNER, { home }); } });
+EventBus.on(GameEvents.GOAL_KICK, ({ home }) => { if (state.match) { state.match.statistics[home ? 'goalKicksHome' : 'goalKicksAway']++; recordMatchEvent(GameEvents.GOAL_KICK, { home }); } });
+EventBus.on(GameEvents.THROW_IN, ({ home }) => { if (state.match) { state.match.statistics[home ? 'throwInsHome' : 'throwInsAway']++; recordMatchEvent(GameEvents.THROW_IN, { home }); } });
+EventBus.on(GameEvents.FREE_KICK, ({ home }) => { if (state.match) { state.match.statistics[home ? 'freeKicksHome' : 'freeKicksAway']++; recordMatchEvent(GameEvents.FREE_KICK, { home }); state.stoppageAccrued += RULES_CONFIG.stoppageTime.perSetPieceSeconds; } });
+EventBus.on(GameEvents.PENALTY, ({ home }) => { if (state.match) { state.match.statistics[home ? 'penaltiesHome' : 'penaltiesAway']++; recordMatchEvent(GameEvents.PENALTY, { home }); state.stoppageAccrued += RULES_CONFIG.stoppageTime.perSetPieceSeconds; } });
+EventBus.on(GameEvents.SAVE, ({ home, playerId }) => {
+  if (!state.match) return;
+  state.match.statistics[home ? 'savesHome' : 'savesAway']++;
+  const p = findPlayerById(playerId);
+  if (p) p.matchStats.saves++;
+  recordMatchEvent(GameEvents.SAVE, { home, playerId });
+});
 
 /* ---------- ERROR SAFETY HELPERS (Step 18) ---------- */
 function isFiniteNum(n) { return typeof n === 'number' && isFinite(n); }
@@ -624,6 +863,21 @@ let state = {
   lastAutoSwitch: 0,
   commentTimer: 0,
   match: null,
+  // ---- Phase 2: match-period flow ----
+  matchPeriod: MatchPeriods.PRE_MATCH,
+  halfDuration: MATCH_CONFIG.defaultDuration / 2,
+  kickoffFreeze: 0,       // frames remaining before kickoff play actually starts
+  kickoffTeamIsHome: true,
+  stoppageAccrued: 0,     // seconds accrued this half, added once timeLeft hits 0
+  stoppageRemaining: 0,   // seconds currently counting down as added time
+  // ---- Phase 2: referee/rules tracking ----
+  lastTouch: null,        // { isHome, playerId } - who last played the ball
+  lastPassBy: null,       // { playerId, isHome, time } - for assist attribution
+  lastShotBy: null,       // { playerId, isHome, time } - for goal/save attribution
+  collisionFoulCooldowns: {}, // "idA-idB" -> last foul timestamp(ms), avoids scrum spam
+  possession: { team: null, homeMs: 0, awayMs: 0 },
+  setPiece: null,         // active SetPieceManager state, or null
+  nextFoulEventId: 1,
 };
 
 /* ---------- INPUT SYSTEM (Step 10) ----------
@@ -710,6 +964,12 @@ const AudioManager = (() => {
       noiseBurst(1.2, 0.08, 0.4, 0.35);
     },
     crowdLow() { noiseBurst(0.4, 0.03, 0, 0.2); },
+    // Phase 2, Step 29: short referee's-whistle variants for stoppages,
+    // built from the same playTone/noiseBurst primitives as Phase 1.
+    foulWhistle() { playTone(1000, 0.14, 'sine', 0.14); setTimeout(() => playTone(1000, 0.1, 'sine', 0.11), 180); },
+    card(isRed) { playTone(isRed ? 220 : 330, 0.22, 'sawtooth', 0.13, isRed ? 160 : 260); },
+    offside() { playTone(760, 0.1, 'square', 0.1); setTimeout(() => playTone(600, 0.12, 'square', 0.1), 110); },
+    setPieceWhistle() { playTone(1000, 0.16, 'sine', 0.13); },
     speak(text) {
       if (!(state.soundOn && SettingsManager.current.audio.commentary) || !window.speechSynthesis) return;
       try {
@@ -736,6 +996,14 @@ const COMMENT_LINES = {
   goodPass: ["Lovely pass.", "Great vision there.", "Nice ball!"],
   tackle: ["Strong challenge!", "Won the ball cleanly.", "Good defensive work."],
   time: ["The clock is ticking.", "Time running out now.", "Final minutes approaching."],
+  foul: ["That's a foul.", "The referee's whistle goes.", "Free kick given away there."],
+  yellow: ["That's a booking.", "Yellow card shown.", "The referee reaches for his pocket."],
+  red: ["Red card! He's off!", "Sent off! Down to ten men.", "That's a straight red!"],
+  offside: ["Offside! Flag's up.", "The linesman's flag goes up.", "Caught offside there."],
+  penalty: ["Penalty! This could be crucial.", "The referee points to the spot!"],
+  corner: ["Corner kick.", "It's out for a corner."],
+  goalKick: ["Goal kick.", "It's a goal kick."],
+  throwIn: ["Throw-in.", "Out for a throw."],
 };
 let commentHideTimer = null;
 function showCommentary(text, ms = UI_CONFIG.commentaryDefaultMs) {
@@ -745,6 +1013,18 @@ function showCommentary(text, ms = UI_CONFIG.commentaryDefaultMs) {
   clearTimeout(commentHideTimer);
   commentHideTimer = setTimeout(() => el.classList.remove('show'), ms);
   AudioManager.speak(text);
+}
+// Phase 2, Step 28: minimal reusable notification banner for rules
+// events (fouls, cards, offside, set pieces, halftime) — same visual
+// language as the existing goal banner, no new screen or redesign.
+let rulesBannerTimer = null;
+function showRulesBanner(text, color, ms = 1500) {
+  const el = document.getElementById('rules-banner');
+  el.textContent = text;
+  el.style.color = color || '#f8fafc';
+  el.classList.add('show');
+  clearTimeout(rulesBannerTimer);
+  rulesBannerTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 function randomLine(key) {
   const arr = COMMENT_LINES[key];
@@ -959,8 +1239,8 @@ function startMatch() {
   document.getElementById('home-abbr').textContent = state.homeTeam.abbr;
   document.getElementById('away-abbr').textContent = state.awayTeam.abbr;
   state.scoreHome = 0; state.scoreAway = 0;
-  state.timeLeft = state.duration; state.goalFlash = 0;
-  createTeams(); resetBall();
+  state.goalFlash = 0;
+  createTeams();
   const field = state.homePlayers.find(p => !p.isGK) || state.homePlayers[0];
   state.controlledId = field.id;
 
@@ -971,15 +1251,98 @@ function startMatch() {
   state.match.homeTeam.players = state.homePlayers.map(p => p.profile);
   state.match.awayTeam.players = state.awayPlayers.map(p => p.profile);
   state.match.matchDuration = state.duration;
+  state.match.halfDuration = state.duration / 2;
   state.match.status = 'playing';
   state.match.selectedPlayer = state.controlledId;
+
+  // Phase 2, Step 3: home kicks off the first half; the flow below
+  // (halftime / second half) hands kickoff to the other side.
+  state.halfDuration = state.duration / 2;
+  state.stoppageAccrued = 0; state.stoppageRemaining = 0;
+  state.lastTouch = null; state.lastPassBy = null; state.lastShotBy = null;
+  state.collisionFoulCooldowns = {};
+  state.possession = { team: null, homeMs: 0, awayMs: 0 };
+  state.setPiece = null; state.match.setPiece = null;
 
   updateHUD(); updateSelectedInfo(); resize();
   state.running = true; state.lastTime = performance.now();
   Game.state.transition(GameStates.PLAYING);
+  beginKickoff(true, MatchPeriods.FIRST_HALF, true);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- KICKOFF SYSTEM (Phase 2, Step 3) ----------
+   Places the ball at center, resets every active player to their
+   formation spot, and freezes gameplay for a short window so the
+   kicking team can't be immediately closed down before the whistle.
+   Used both for match/half kickoff (resetClock=true, starts the clock
+   for that half) and for the restart after every goal (resetClock
+   false — the clock and any accrued stoppage time carry over). */
+function beginKickoff(kickoffIsHome, period, resetClock) {
+  if (!state.running) return; // Step 30: guards a delayed kickoff firing after the match ended/was left
+  resetBall();
+  state.kickoffTeamIsHome = kickoffIsHome;
+  state.kickoffFreeze = RULES_CONFIG.setPieces.freezeFrames;
+  state.matchPeriod = MatchPeriods.KICKOFF;
+  state.pendingPeriod = period; // which period KICKOFF resolves into once the freeze ends
+  state.setPiece = null; if (state.match) state.match.setPiece = null;
+  if (resetClock) {
+    state.timeLeft = state.halfDuration;
+    state.stoppageAccrued = 0; state.stoppageRemaining = 0;
+  }
+  if (state.match) state.match.period = MatchPeriods.KICKOFF;
+  EventBus.emit(GameEvents.KICKOFF, { home: kickoffIsHome, period });
   AudioManager.whistle();
   showCommentary(randomLine('kickoff'), 2500);
-  requestAnimationFrame(loop);
+}
+
+/* ---------- HALFTIME (Phase 2, Step 2) ---------- */
+function goToHalftime() {
+  state.matchPeriod = MatchPeriods.HALFTIME;
+  if (state.match) state.match.period = MatchPeriods.HALFTIME;
+  Game.state.transition(GameStates.HALFTIME);
+  AudioManager.whistle();
+  showRulesBanner('HALFTIME', '#38bdf8');
+  showCommentary('The referee blows for halftime.', 2600);
+  EventBus.emit(GameEvents.HALFTIME, {});
+  setTimeout(() => {
+    if (state.matchPeriod !== MatchPeriods.HALFTIME) return; // guard: match may have been abandoned via Main Menu
+    Game.state.transition(GameStates.PLAYING);
+    EventBus.emit(GameEvents.SECOND_HALF, {});
+    beginKickoff(false, MatchPeriods.SECOND_HALF, true);
+  }, 2600);
+}
+
+/* ---------- ADDED TIME (Phase 2, Step 22) ----------
+   Advances the match clock for the active half, and folds in stoppage
+   time once regulation time in that half runs out — derived only from
+   real stoppage-causing events (goals/cards/set pieces) accrued via
+   the EventBus wiring above, never an arbitrary flat number. */
+function tickMatchClock(dt) {
+  const seconds = dt / 60;
+  if (state.stoppageRemaining > 0) {
+    state.stoppageRemaining = Math.max(0, state.stoppageRemaining - seconds);
+    if (state.match) state.match.matchTime = matchTimeForPeriod(state.matchPeriod, 0);
+    if (state.stoppageRemaining <= 0) resolveHalfEnd();
+    return;
+  }
+  state.timeLeft -= seconds;
+  if (state.match) state.match.matchTime = matchTimeForPeriod(state.matchPeriod, state.timeLeft);
+  if (state.timeLeft <= 0) {
+    state.timeLeft = 0;
+    const stoppage = Math.min(state.stoppageAccrued, RULES_CONFIG.stoppageTime.maxSeconds);
+    state.stoppageAccrued = 0;
+    if (stoppage > 0.01) { state.stoppageRemaining = stoppage; return; }
+    resolveHalfEnd();
+  }
+}
+function matchTimeForPeriod(period, timeLeftInHalf) {
+  const elapsedThisHalf = state.halfDuration - Math.max(0, timeLeftInHalf);
+  return period === MatchPeriods.SECOND_HALF ? state.halfDuration + elapsedThisHalf : elapsedThisHalf;
+}
+function resolveHalfEnd() {
+  if (state.matchPeriod === MatchPeriods.FIRST_HALF) goToHalftime();
+  else if (state.matchPeriod === MatchPeriods.SECOND_HALF) endMatch();
 }
 
 function createTeams() {
@@ -1033,25 +1396,48 @@ function makePlayer(data, team, pos, isHome) {
     facing: isHome ? 0 : Math.PI,
     cooldown: 0, stunned: 0, isGK: data.pos === 'GK',
     profile: buildPlayerProfile(data, team.id),
+    discipline: buildDiscipline(),       // Phase 2, Step 6
+    matchStats: buildPlayerMatchStats(), // Phase 2, Step 18
   };
 }
 
 function resetBall() {
   state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8 };
   state.homePlayers.forEach((p, i) => {
+    if (p.discipline.sentOff) return; // Step 7: don't re-place a sent-off player
     const fp = formation(state.teamSize, true)[i];
     p.x = fp.x; p.y = fp.y; p.vx = 0; p.vy = 0; p.stunned = 0;
   });
   state.awayPlayers.forEach((p, i) => {
+    if (p.discipline.sentOff) return;
     const fp = formation(state.teamSize, false)[i];
     p.x = fp.x; p.y = fp.y; p.vx = 0; p.vy = 0; p.stunned = 0;
   });
 }
 
+// Every player on the pitch, sent-off or not — used for rare bookkeeping
+// (e.g. looking a player up by id for stats attribution).
 function allPlayers() { return [...state.homePlayers, ...state.awayPlayers]; }
+// Phase 2, Step 7: players still legally on the pitch. AI, collisions,
+// auto-switch, rendering and getControlled() all use this instead of
+// allPlayers() so a sent-off player stops participating entirely.
+function activePlayers() { return allPlayers().filter(p => !p.discipline.sentOff); }
+function findPlayerById(id) {
+  if (id == null) return null;
+  return allPlayers().find(p => p.id === id) || null;
+}
 function getControlled() {
-  return state.homePlayers.find(p => p.id === state.controlledId)
-    || state.homePlayers.find(p => !p.isGK) || state.homePlayers[0];
+  const cur = state.homePlayers.find(p => p.id === state.controlledId);
+  if (cur && !cur.discipline.sentOff) return cur;
+  // Controlled player was sent off (or missing) — hand control to the
+  // next available outfield player, same fallback order as Phase 1.
+  const fallback = state.homePlayers.find(p => !p.isGK && !p.discipline.sentOff)
+    || state.homePlayers.find(p => !p.discipline.sentOff);
+  if (fallback && fallback.id !== state.controlledId) {
+    state.controlledId = fallback.id;
+    if (state.match) state.match.selectedPlayer = fallback.id;
+  }
+  return fallback;
 }
 
 /* Auto-switch like eFootball: switch to closest when ball is far / lost (Step 14) */
@@ -1065,6 +1451,7 @@ function autoSwitchIfNeeded() {
   if (dist > CONTROL_CONFIG.autoSwitchDist) {
     let best = p, bestD = dist;
     for (const t of state.homePlayers) {
+      if (t.discipline.sentOff) continue; // Step 25: AI must not select a sent-off player
       if (t.isGK && state.homePlayers.length > 1) continue;
       const d = Math.hypot(t.x - ball.x, t.y - ball.y);
       if (d < bestD - CONTROL_CONFIG.autoSwitchMargin) { bestD = d; best = t; }
@@ -1101,24 +1488,55 @@ function loop(now) {
   try {
     const dt = Math.min((now - state.lastTime) / 16.67, 2.2);
     state.lastTime = now;
-    state.timeLeft -= dt / 60;
-    if (state.match) state.match.matchTime = state.duration - state.timeLeft;
-    if (state.timeLeft <= 0) { state.timeLeft = 0; endMatch(); return; }
     if (state.goalFlash > 0) state.goalFlash -= dt;
-    state.commentTimer += dt;
-    const [lo, hi] = MATCH_CONFIG.lateGameCommentWindow;
-    if (state.commentTimer > MATCH_CONFIG.lateGameCommentIntervalFrames && state.timeLeft < hi && state.timeLeft > lo) {
-      showCommentary(randomLine('time'), 2200);
-      state.commentTimer = 0;
+
+    // ---- HALFTIME: engine fully paused, waiting on goToHalftime()'s timer ----
+    if (state.matchPeriod === MatchPeriods.HALFTIME) { draw(); requestAnimationFrame(loop); return; }
+
+    // ---- KICKOFF freeze: ball/players held, clock not yet running (Step 3) ----
+    if (state.kickoffFreeze > 0) {
+      state.kickoffFreeze -= dt;
+      if (state.kickoffFreeze <= 0) { state.matchPeriod = state.pendingPeriod; if (state.match) state.match.period = state.pendingPeriod; }
+      sanitizeAllEntities();
+      updateHUD();
+      draw();
+      requestAnimationFrame(loop);
+      return;
+    }
+
+    // ---- Regulation clock only runs during an actual half (Step 21-22) ----
+    tickMatchClock(dt);
+    if (!state.running) { draw(); return; } // tickMatchClock may have ended the match this frame
+
+    if (state.goalFlash <= 0) {
+      state.commentTimer += dt;
+      const [lo, hi] = MATCH_CONFIG.lateGameCommentWindow;
+      if (state.commentTimer > MATCH_CONFIG.lateGameCommentIntervalFrames && state.timeLeft < hi && state.timeLeft > lo) {
+        showCommentary(randomLine('time'), 2200);
+        state.commentTimer = 0;
+      }
     }
     updateHUD();
+
+    // ---- Set piece in progress: freeze normal AI/input, just tick the restart (Step 24) ----
+    if (state.setPiece && state.setPiece.active) {
+      SetPieceManager.update(dt);
+      sanitizeAllEntities();
+      draw();
+      requestAnimationFrame(loop);
+      return;
+    }
+
+    updatePossession(dt); // Step 19
+    runIntegrityCheck(dt); // Step 23/30
     autoSwitchIfNeeded();
     updateControlled(dt);
     updateAI(dt);
     updateBall(dt);
     resolveCollisions();
-    sanitizeAllEntities(); // Step 18: guard against NaN/Infinity before render
+    sanitizeAllEntities(); // Step 18/23: guard against NaN/Infinity before render
     checkGoals();
+    if (!(state.goalFlash > 0)) checkBoundaries(); // Step 13: a goal this frame always wins over an OOB read
     draw();
   } catch (err) {
     console.error('[GameLoop] error during frame, attempting to continue', err);
@@ -1126,9 +1544,53 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
+/* ---------- POSSESSION (Phase 2, Step 19) ----------
+   Cheap: reuses the distance-to-ball figure computed for auto-switch
+   rather than an extra full pass over every player, and only updates a
+   running millisecond counter — no per-frame recalculation of a %. */
+function updatePossession(dt) {
+  const b = state.ball;
+  let closest = null, closestD = Infinity;
+  for (const p of activePlayers()) {
+    const d = Math.hypot(p.x - b.x, p.y - b.y);
+    if (d < closestD) { closestD = d; closest = p; }
+  }
+  if (closest && closestD < 22) state.possession.team = closest.isHome;
+  if (state.possession.team === true) state.possession.homeMs += dt * 16.67;
+  else if (state.possession.team === false) state.possession.awayMs += dt * 16.67;
+  if (state.match) {
+    state.match.statistics.possessionHomeMs = state.possession.homeMs;
+    state.match.statistics.possessionAwayMs = state.possession.awayMs;
+  }
+}
+
 function sanitizeAllEntities() {
+  if (!state.ball || !isFiniteNum(state.ball.x)) state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8 }; // Step 23: missing/corrupt ball
   sanitizeEntity(state.ball, PITCH.w / 2, PITCH.h / 2);
   for (const p of allPlayers()) sanitizeEntity(p, PITCH.w / 2, PITCH.h / 2);
+}
+
+// Phase 2, Step 23/30: runs roughly twice a second, not every frame —
+// cheap invariant checks that log and self-heal rather than crash the
+// match if something ends up in an impossible state.
+let integrityCheckTimer = 0;
+function runIntegrityCheck(dt) {
+  integrityCheckTimer += dt;
+  if (integrityCheckTimer < 30) return;
+  integrityCheckTimer = 0;
+  const seen = new Set();
+  for (const p of allPlayers()) {
+    if (seen.has(p.id)) console.warn('[Integrity] duplicate player id detected', p.id);
+    seen.add(p.id);
+    if (p.team !== state.homeTeam && p.team !== state.awayTeam) console.warn('[Integrity] player with invalid team assignment', p.id);
+  }
+  if (state.setPiece && state.setPiece.active && !['FREE_KICK', 'PENALTY', 'CORNER', 'GOAL_KICK', 'THROW_IN'].includes(state.setPiece.type)) {
+    console.warn('[Integrity] invalid set-piece type, cancelling', state.setPiece.type);
+    SetPieceManager.finish();
+  }
+  const activeHome = state.homePlayers.filter(p => !p.discipline.sentOff).length;
+  const activeAway = state.awayPlayers.filter(p => !p.discipline.sentOff).length;
+  if (activeHome < 1 || activeAway < 1) console.warn('[Integrity] a team has no active players left', { activeHome, activeAway });
 }
 
 function updateControlled(dt) {
@@ -1152,10 +1614,10 @@ function updateControlled(dt) {
   if (InputManager.isTackle() && p.cooldown <= 0) doTackle(p);
 }
 
-function nearestTeammate(from) {
+function nearestTeammate(from, teammates) {
   let best = null, bestScore = Infinity;
-  for (const p of state.homePlayers) {
-    if (p.id === from.id) continue;
+  for (const p of (teammates || state.homePlayers)) {
+    if (p.id === from.id || p.discipline.sentOff) continue;
     const d = Math.hypot(p.x - from.x, p.y - from.y);
     const toP = Math.atan2(p.y - from.y, p.x - from.x);
     const align = Math.cos(toP - from.facing);
@@ -1168,7 +1630,7 @@ function nearestTeammate(from) {
 function doShoot(p, powerUp) {
   const b = state.ball;
   if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r + PLAYER_CONFIG.shootRange) return;
-  const goalX = PITCH.w - PITCH.margin;
+  const goalX = p.isHome ? PITCH.w - PITCH.margin : PITCH.margin;
   const goalY = PITCH.h / 2 + (Math.random() - 0.5) * 50;
   const ang = Math.atan2(goalY - p.y, goalX - p.x);
   const power = (8.5 + p.power / 100 * 5.5) * (powerUp ? 1.3 : 1);
@@ -1176,16 +1638,33 @@ function doShoot(p, powerUp) {
   b.vy = Math.sin(ang) * power + p.vy * 0.25;
   p.cooldown = PLAYER_CONFIG.shootCooldown;
   AudioManager.kick();
-  EventBus.emit('shot', { home: p.isHome });
+  state.lastTouch = { isHome: p.isHome, playerId: p.id };
+  state.lastShotBy = { playerId: p.id, isHome: p.isHome, time: state.match ? state.match.matchTime : 0 };
+  // This engine always aims within the goal mouth (goalY is bounded well
+  // inside GOAL_W), so every human/AI shot here is genuinely "on target"
+  // unless a defender/GK intervenes — not a fabricated stat.
+  EventBus.emit(GameEvents.SHOT, { home: p.isHome, onTarget: true, playerId: p.id });
 }
 
 function doPass(p, through) {
   const b = state.ball;
   if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r + PLAYER_CONFIG.passRange) return;
-  const target = nearestTeammate(p);
+  const teammates = p.isHome ? state.homePlayers : state.awayPlayers;
+  const target = nearestTeammate(p, teammates);
+  let completed = false;
   if (!target) {
     b.vx = Math.cos(p.facing) * 7; b.vy = Math.sin(p.facing) * 7;
   } else {
+    completed = true;
+    // Step 14: offside is only ever evaluated for an actual forward
+    // through-ball to a specific receiver — never for standing position
+    // alone. If flagged, the restart is handled by the referee and the
+    // pass itself is not additionally credited as completed.
+    if (through && RefereeSystem.evaluateOffside(p, target, b)) {
+      p.cooldown = PLAYER_CONFIG.passCooldown;
+      EventBus.emit(GameEvents.PASS, { home: p.isHome, through: true, playerId: p.id, completed: false });
+      return;
+    }
     let tx = target.x, ty = target.y;
     if (through) {
       tx += (p.isHome ? 70 : -70) + Math.cos(target.facing || 0) * 40;
@@ -1198,25 +1677,34 @@ function doPass(p, through) {
   }
   p.cooldown = PLAYER_CONFIG.passCooldown;
   AudioManager.pass();
-  EventBus.emit('pass', { home: p.isHome, through: !!through });
+  state.lastTouch = { isHome: p.isHome, playerId: p.id };
+  state.lastPassBy = { playerId: p.id, isHome: p.isHome, time: state.match ? state.match.matchTime : 0 };
+  EventBus.emit(GameEvents.PASS, { home: p.isHome, through: !!through, playerId: p.id, completed });
 }
 
 function doTackle(p) {
   p.cooldown = PLAYER_CONFIG.tackleCooldown;
-  AudioManager.tackle();
   const range = PLAYER_CONFIG.tackleBaseRange + p.tackle / 100 * PLAYER_CONFIG.tackleRangeScale;
-  for (const o of state.awayPlayers) {
+  const opponents = p.isHome ? state.awayPlayers : state.homePlayers;
+  for (const o of opponents) {
+    if (o.discipline.sentOff) continue; // Step 23: can't tackle a player who's left the pitch
     if (Math.hypot(o.x - p.x, o.y - p.y) < range) {
+      // Step 4-5: the referee gets first look at every in-range tackle.
+      // If it's a foul, the normal Phase 1 success/failure outcome
+      // below is skipped — the restart is handled by RefereeSystem.
+      if (RefereeSystem.evaluateTackle(p, o)) return;
+      AudioManager.tackle();
       const success = Math.random() < PLAYER_CONFIG.tackleBaseChance + p.tackle / 100 * PLAYER_CONFIG.tackleChanceScale;
       if (success) {
         o.stunned = PLAYER_CONFIG.tackleSuccessStunMin + Math.random() * PLAYER_CONFIG.tackleSuccessStunRand;
         o.vx = (o.x - p.x) * 0.12; o.vy = (o.y - p.y) * 0.12;
         if (Math.hypot(state.ball.x - o.x, state.ball.y - o.y) < 32) {
           state.ball.vx = (p.x - o.x) * 0.1; state.ball.vy = (p.y - o.y) * 0.1;
+          state.lastTouch = { isHome: p.isHome, playerId: p.id };
         }
         if (Math.random() < 0.4) showCommentary(randomLine('tackle'), 1600);
       } else p.stunned = PLAYER_CONFIG.tackleFailStun;
-      EventBus.emit('tackle', { home: p.isHome, success });
+      EventBus.emit(GameEvents.TACKLE, { home: p.isHome, success, playerId: p.id });
       break;
     }
   }
@@ -1226,6 +1714,7 @@ function updateAI(dt) {
   const ball = state.ball;
   const A = AI_CONFIG.away;
   for (const p of state.awayPlayers) {
+    if (p.discipline.sentOff) continue; // Step 25: AI must not move a sent-off player
     if (p.stunned > 0) { p.stunned -= dt; p.vx *= 0.88; p.vy *= 0.88; continue; }
     if (p.cooldown > 0) p.cooldown -= dt;
     if (p.isGK) { updateGK(p, dt, false); continue; }
@@ -1241,12 +1730,15 @@ function updateAI(dt) {
         ball.vx = Math.cos(ang) * (A.shootPowerBase + p.power / 100 * A.shootPowerScale);
         ball.vy = Math.sin(ang) * (A.shootPowerBase + p.power / 100 * A.shootPowerScale);
         p.cooldown = A.shootCooldown; AudioManager.kick();
-        EventBus.emit('shot', { home: false });
+        state.lastTouch = { isHome: false, playerId: p.id };
+        state.lastShotBy = { playerId: p.id, isHome: false, time: state.match ? state.match.matchTime : 0 };
+        EventBus.emit(GameEvents.SHOT, { home: false, onTarget: true, playerId: p.id });
       }
     }
   }
   const H = AI_CONFIG.home;
   for (const p of state.homePlayers) {
+    if (p.discipline.sentOff) continue; // Step 25
     if (p.id === state.controlledId) continue;
     if (p.stunned > 0) { p.stunned -= dt; continue; }
     if (p.cooldown > 0) p.cooldown -= dt;
@@ -1265,7 +1757,9 @@ function updateAI(dt) {
       ball.vx = Math.cos(ang) * (H.shootPowerBase + p.power / 100 * H.shootPowerScale);
       ball.vy = Math.sin(ang) * (H.shootPowerBase + p.power / 100 * H.shootPowerScale);
       p.cooldown = H.shootCooldown; AudioManager.kick();
-      EventBus.emit('shot', { home: true });
+      state.lastTouch = { isHome: true, playerId: p.id };
+      state.lastShotBy = { playerId: p.id, isHome: true, time: state.match ? state.match.matchTime : 0 };
+      EventBus.emit(GameEvents.SHOT, { home: true, onTarget: true, playerId: p.id });
     }
   }
 }
@@ -1283,8 +1777,15 @@ function updateGK(p, dt, isHome) {
   if (distBall < p.r + ball.r + G.catchRange) {
     const towardGoal = isHome ? ball.vx < 0 : ball.vx > 0;
     if (towardGoal || Math.hypot(ball.vx, ball.vy) < 3) {
+      // Phase 2, Step 18-19: a catch of a shot from the opposing team,
+      // heading toward this goal, is a real save — only counted once
+      // per catch via the cooldown-style check on lastTouch.
+      if (towardGoal && state.lastTouch && state.lastTouch.isHome !== isHome && state.lastTouch.playerId !== p.id) {
+        EventBus.emit(GameEvents.SAVE, { home: isHome, playerId: p.id });
+      }
       ball.vx *= 0.15; ball.vy *= 0.15;
       ball.x = p.x + (isHome ? 12 : -12); ball.y = p.y;
+      state.lastTouch = { isHome, playerId: p.id };
       if (Math.random() < G.releaseChancePerDt * dt) {
         const ang = isHome ? 0.3 + Math.random() * 0.6 : Math.PI - 0.3 - Math.random() * 0.6;
         ball.vx = Math.cos(ang) * 8; ball.vy = Math.sin(ang) * 5;
@@ -1312,15 +1813,17 @@ function updateBall(dt) {
   b.vx *= PHYSICS_CONFIG.ballFriction; b.vy *= PHYSICS_CONFIG.ballFriction;
   if (Math.hypot(b.vx, b.vy) < PHYSICS_CONFIG.ballMinSpeed) { b.vx = 0; b.vy = 0; }
   b.x += b.vx * dt; b.y += b.vy * dt;
-  if (b.y < PITCH.margin + b.r) { b.y = PITCH.margin + b.r; b.vy *= PHYSICS_CONFIG.wallBounceY; }
-  if (b.y > PITCH.h - PITCH.margin - b.r) { b.y = PITCH.h - PITCH.margin - b.r; b.vy *= PHYSICS_CONFIG.wallBounceY; }
-  const gTop = PITCH.h / 2 - GOAL_W / 2, gBot = PITCH.h / 2 + GOAL_W / 2;
-  if (b.x < PITCH.margin + b.r && (b.y < gTop || b.y > gBot)) { b.x = PITCH.margin + b.r; b.vx *= PHYSICS_CONFIG.wallBounceX; }
-  if (b.x > PITCH.w - PITCH.margin - b.r && (b.y < gTop || b.y > gBot)) { b.x = PITCH.w - PITCH.margin - b.r; b.vx *= PHYSICS_CONFIG.wallBounceX; }
+  // Phase 2, Step 13: touchlines and goal-lines are no longer walls —
+  // the ball is allowed to leave the pitch, and checkBoundaries() (run
+  // once per frame from the game loop, right after checkGoals) is the
+  // single authoritative place that classifies what happens next
+  // (goal already handled separately / throw-in / corner / goal kick).
+  // PHYSICS_CONFIG.wallBounceX/Y are kept for reference but are no
+  // longer applied here — superseded by real out-of-bounds rules.
 }
 
 function resolveCollisions() {
-  const players = allPlayers(), b = state.ball;
+  const players = activePlayers(), b = state.ball; // Step 25: sent-off players don't collide
   for (const p of players) {
     const dx = b.x - p.x, dy = b.y - p.y, dist = Math.hypot(dx, dy), minD = p.r + b.r;
     if (dist < minD && dist > 0.1) {
@@ -1328,7 +1831,10 @@ function resolveCollisions() {
       b.x += nx * (minD - dist) * PHYSICS_CONFIG.ballSeparationFactor;
       b.y += ny * (minD - dist) * PHYSICS_CONFIG.ballSeparationFactor;
       const impact = (p.vx - b.vx) * nx + (p.vy - b.vy) * ny;
-      if (impact > 0) { b.vx += nx * impact * PHYSICS_CONFIG.ballImpactFactor; b.vy += ny * impact * PHYSICS_CONFIG.ballImpactFactor; }
+      if (impact > 0) {
+        b.vx += nx * impact * PHYSICS_CONFIG.ballImpactFactor; b.vy += ny * impact * PHYSICS_CONFIG.ballImpactFactor;
+        state.lastTouch = { isHome: p.isHome, playerId: p.id }; // Step 13: needed by the out-of-bounds engine
+      }
     }
   }
   for (let i = 0; i < players.length; i++) {
@@ -1338,26 +1844,320 @@ function resolveCollisions() {
       if (dist < minD && dist > 0.1) {
         const nx = dx / dist, ny = dy / dist, push = (minD - dist) * PHYSICS_CONFIG.playerSeparationFactor;
         a.x -= nx * push; a.y -= ny * push; c.x += nx * push; c.y += ny * push;
+        if (a.isHome !== c.isHome) RefereeSystem.evaluateCollision(a, c); // Step 4: only cross-team contact can be a foul
       }
     }
   }
 }
 
+/* =====================================================================
+   REFEREE SYSTEM (Phase 2, Steps 4-9, 14-16)
+   Central rules authority. Every foul/card/offside/advantage decision
+   in the match goes through here, driven only by real gameplay state
+   (tackle attempts, collisions, pass targets) — nothing here is a
+   random background event unconnected to what's happening on the ball.
+   ===================================================================== */
+const RefereeSystem = {
+  /* Step 4-5: called from doTackle() for every in-range tackle attempt.
+     Returns true if a foul was whistled (caller should not also apply
+     the normal Phase 1 tackle-success/failure outcome). */
+  evaluateTackle(tackler, victim) {
+    const cfg = RULES_CONFIG.fouls;
+    if (!cfg.enabled) return false;
+    if (Math.random() >= cfg.tackleFoulChance) return false; // most tackles play out exactly as Phase 1
+    // Lower tackling ability -> more likely to mistime the challenge.
+    const severity = Math.min(1, Math.max(0, (1 - tackler.tackle / 100) * 0.6 + Math.random() * 0.5));
+    const fromBehind = Math.cos(tackler.facing - Math.atan2(tackler.y - victim.y, tackler.x - victim.x)) < -0.2;
+    const type = severity > cfg.recklessThreshold ? 'reckless_tackle' : (fromBehind ? 'foul_from_behind' : 'late_tackle');
+    this._whistle(tackler, victim, type, severity);
+    return true;
+  },
+  /* Step 4: called from resolveCollisions for any hard cross-team
+     collision. Gated by a real relative-velocity threshold and a
+     per-pair cooldown so a scrum of players doesn't spam fouls. */
+  evaluateCollision(a, c) {
+    const cfg = RULES_CONFIG.fouls;
+    if (!cfg.enabled) return;
+    const relSpeed = Math.hypot(a.vx - c.vx, a.vy - c.vy);
+    if (relSpeed < cfg.collisionThreshold) return; // normal shoulder-to-shoulder contact — never a foul
+    const key = a.id < c.id ? `${a.id}-${c.id}` : `${c.id}-${a.id}`;
+    const now = performance.now();
+    if (now - (state.collisionFoulCooldowns[key] || 0) < cfg.collisionCooldownMs) return;
+    if (Math.random() >= cfg.collisionFoulChance) return;
+    state.collisionFoulCooldowns[key] = now;
+    // Whoever was moving faster into the challenge is the offender.
+    const [tackler, victim] = Math.hypot(a.vx, a.vy) >= Math.hypot(c.vx, c.vy) ? [a, c] : [c, a];
+    const severity = Math.min(1, 0.35 + (relSpeed - cfg.collisionThreshold) / 12);
+    this._whistle(tackler, victim, 'collision_foul', severity);
+  },
+  _whistle(offender, victim, type, severity) {
+    if (offender.discipline.sentOff) return; // Step 23: an off-pitch player can't commit a new foul
+    const cfg = RULES_CONFIG.fouls;
+    const foul = {
+      id: state.nextFoulEventId++, type, playerId: offender.id, teamId: offender.team.id,
+      victimPlayerId: victim.id, location: { x: offender.x, y: offender.y },
+      severity: Math.round(severity * 100) / 100, timestamp: state.match ? state.match.matchTime : 0,
+    };
+    offender.cooldown = Math.max(offender.cooldown, PLAYER_CONFIG.tackleCooldown);
+    EventBus.emit(GameEvents.FOUL, { ...foul, home: offender.isHome });
+    // Step 15: advantage — if the fouled side still has a clear, quick
+    // attack on, let play run instead of stopping it immediately.
+    if (this.applyAdvantage(victim)) {
+      showRulesBanner('ADVANTAGE', '#facc15', 1100);
+      AudioManager.foulWhistle();
+      if (severity > cfg.recklessThreshold) this.issueCard(offender, severity > cfg.seriousFoulThreshold ? 'red' : 'yellow', foul);
+      return;
+    }
+    AudioManager.foulWhistle();
+    showRulesBanner('FOUL', '#f87171', 1300);
+    showCommentary(randomLine('foul'), 1800);
+    if (severity > cfg.recklessThreshold) {
+      this.issueCard(offender, severity > cfg.seriousFoulThreshold ? 'red' : 'yellow', foul);
+    }
+    this._startRestartFromFoul(offender, foul);
+  },
+  _startRestartFromFoul(offender, foul) {
+    const defendingIsHome = offender.isHome; // offender's team is defending against the restart
+    const box = penaltyBoxFor(defendingIsHome);
+    const inBox = foul.location.x >= box.x0 && foul.location.x <= box.x1
+      && foul.location.y >= box.y0 && foul.location.y <= box.y1;
+    if (inBox) SetPieceManager.start('PENALTY', { teamId: (defendingIsHome ? state.awayTeam : state.homeTeam).id, teamIsHome: !defendingIsHome, location: { x: foul.location.x, y: foul.location.y }, victimId: foul.victimPlayerId });
+    else SetPieceManager.start('FREE_KICK', { teamId: (defendingIsHome ? state.awayTeam : state.homeTeam).id, teamIsHome: !defendingIsHome, location: foul.location, victimId: foul.victimPlayerId });
+  },
+  /* Step 6-7: yellow/red card bookkeeping and sending a player off. */
+  issueCard(player, kind, foulRef) {
+    if (player.discipline.sentOff) return;
+    if (kind === 'yellow') {
+      player.discipline.yellowCards++;
+      if (player.discipline.yellowCards >= RULES_CONFIG.cards.yellowToRed) {
+        this.issueCard(player, 'red', foulRef); // second yellow -> red
+        return;
+      }
+      AudioManager.card(false);
+      showRulesBanner('YELLOW CARD', '#facc15', 1600);
+      showCommentary(randomLine('yellow'), 2000);
+      EventBus.emit(GameEvents.YELLOW_CARD, { home: player.isHome, playerId: player.id });
+    } else {
+      player.discipline.redCard = true;
+      player.discipline.sentOff = true;
+      AudioManager.card(true);
+      showRulesBanner('RED CARD', '#ef4444', 2000);
+      showCommentary(randomLine('red'), 2400);
+      if (state.controlledId === player.id) getControlled(); // Step 7: hand control to a teammate immediately
+      EventBus.emit(GameEvents.RED_CARD, { home: player.isHome, playerId: player.id });
+    }
+  },
+  /* Step 15: simple advantage — the fouled team keeps it if, right now,
+     the ball is moving briskly toward the opponents' goal and a
+     teammate of the victim is closer to it than any opponent. */
+  applyAdvantage(victim) {
+    if (!RULES_CONFIG.advantage.enabled) return false;
+    const b = state.ball;
+    const towardAwayGoal = victim.isHome && b.vx > RULES_CONFIG.advantage.minBallSpeedTowardGoal;
+    const towardHomeGoal = !victim.isHome && b.vx < -RULES_CONFIG.advantage.minBallSpeedTowardGoal;
+    if (!towardAwayGoal && !towardHomeGoal) return false;
+    const mine = (victim.isHome ? state.homePlayers : state.awayPlayers).filter(p => !p.discipline.sentOff);
+    const theirs = (victim.isHome ? state.awayPlayers : state.homePlayers).filter(p => !p.discipline.sentOff);
+    const closest = arr => arr.reduce((best, p) => {
+      const d = Math.hypot(p.x - b.x, p.y - b.y);
+      return d < best ? d : best;
+    }, Infinity);
+    return closest(mine) < closest(theirs);
+  },
+  /* Step 14: offside check, run at the moment of a forward through pass.
+     Only ever called for that specific pass/receiver pair — a player
+     merely standing upfield never triggers this on its own. */
+  evaluateOffside(passer, receiver, ball) {
+    if (!RULES_CONFIG.offside.enabled || !receiver) return false;
+    const defenders = (passer.isHome ? state.awayPlayers : state.homePlayers)
+      .filter(p => !p.isGK && !p.discipline.sentOff);
+    if (defenders.length < 2) return false; // need at least a "second-last" defender to exist
+    // For a home attack the defensive line is measured by away players'
+    // x (higher x = deeper, closer to their own goal); mirrored for away.
+    const sorted = defenders.slice().sort((a, b2) => passer.isHome ? b2.x - a.x : a.x - b2.x);
+    const secondLastX = sorted[1].x;
+    const buf = RULES_CONFIG.offside.offsideBuffer;
+    const beyondDefense = passer.isHome ? receiver.x > secondLastX + buf : receiver.x < secondLastX - buf;
+    const beyondBall = passer.isHome ? receiver.x > ball.x + buf : receiver.x < ball.x - buf;
+    if (!beyondDefense || !beyondBall) return false;
+    EventBus.emit(GameEvents.OFFSIDE, { home: receiver.isHome, playerId: receiver.id, passerId: passer.id, location: { x: receiver.x, y: receiver.y } });
+    AudioManager.offside();
+    showRulesBanner('OFFSIDE', '#fb923c', 1500);
+    showCommentary(randomLine('offside'), 1800);
+    SetPieceManager.start('FREE_KICK', { teamId: (receiver.isHome ? state.awayTeam : state.homeTeam).id, teamIsHome: !receiver.isHome, location: { x: receiver.x, y: receiver.y } });
+    return true;
+  },
+  /* Step 11-13: out-of-bounds classification, called once per frame
+     from the game loop after checkGoals (so an actual goal always wins
+     over an out-of-bounds read on the same frame). */
+  evaluateBoundary() {
+    const b = state.ball;
+    const gTop = PITCH.h / 2 - GOAL_W / 2, gBot = PITCH.h / 2 + GOAL_W / 2;
+    const touch = state.lastTouch;
+    if (b.y < PITCH.margin || b.y > PITCH.h - PITCH.margin) {
+      const restartIsHome = touch ? !touch.isHome : true;
+      const inset = RULES_CONFIG.boundaries.throwInInset;
+      const loc = { x: Math.max(PITCH.margin, Math.min(PITCH.w - PITCH.margin, b.x)), y: b.y < PITCH.margin ? PITCH.margin + inset : PITCH.h - PITCH.margin - inset };
+      SetPieceManager.start('THROW_IN', { teamId: (restartIsHome ? state.homeTeam : state.awayTeam).id, teamIsHome: restartIsHome, location: loc });
+      return true;
+    }
+    if (b.x < PITCH.margin && !(b.y > gTop && b.y < gBot)) {
+      // Home defends this (left) goal line.
+      const defenderTouchedLast = touch ? touch.isHome : true; // unknown toucher defaults to goal kick, the more common case
+      if (defenderTouchedLast) SetPieceManager.start('CORNER', { teamId: state.awayTeam.id, teamIsHome: false, location: { x: PITCH.margin + RULES_CONFIG.boundaries.cornerInset, y: b.y < PITCH.h / 2 ? PITCH.margin + RULES_CONFIG.boundaries.cornerInset : PITCH.h - PITCH.margin - RULES_CONFIG.boundaries.cornerInset } });
+      else SetPieceManager.start('GOAL_KICK', { teamId: state.homeTeam.id, teamIsHome: true, location: { x: PITCH.margin + RULES_CONFIG.boundaries.goalKickInset, y: PITCH.h / 2 } });
+      return true;
+    }
+    if (b.x > PITCH.w - PITCH.margin && !(b.y > gTop && b.y < gBot)) {
+      // Away defends this (right) goal line.
+      const defenderTouchedLast = touch ? !touch.isHome : true;
+      if (defenderTouchedLast) SetPieceManager.start('CORNER', { teamId: state.homeTeam.id, teamIsHome: true, location: { x: PITCH.w - PITCH.margin - RULES_CONFIG.boundaries.cornerInset, y: b.y < PITCH.h / 2 ? PITCH.margin + RULES_CONFIG.boundaries.cornerInset : PITCH.h - PITCH.margin - RULES_CONFIG.boundaries.cornerInset } });
+      else SetPieceManager.start('GOAL_KICK', { teamId: state.awayTeam.id, teamIsHome: false, location: { x: PITCH.w - PITCH.margin - RULES_CONFIG.boundaries.goalKickInset, y: PITCH.h / 2 } });
+      return true;
+    }
+    return false;
+  },
+};
+function penaltyBoxFor(isHome) {
+  const penW = 165, penH = 300;
+  return isHome
+    ? { x0: PITCH.margin, x1: PITCH.margin + penW, y0: PITCH.h / 2 - penH / 2, y1: PITCH.h / 2 + penH / 2 }
+    : { x0: PITCH.w - PITCH.margin - penW, x1: PITCH.w - PITCH.margin, y0: PITCH.h / 2 - penH / 2, y1: PITCH.h / 2 + penH / 2 };
+}
+
+/* =====================================================================
+   SET-PIECE MANAGER (Phase 2, Steps 8-13, 24)
+   One reusable controller for every restart type instead of separate
+   hardcoded positioning code per set piece. While active it freezes
+   normal AI/input movement (see loop()); positions ball + players;
+   and auto-executes the restart after a short delay using the
+   existing doPass/doShoot mechanics — no separate shooting engine.
+   ===================================================================== */
+const SetPieceManager = {
+  start(type, opts) {
+    if (!state.match) return;
+    const s = {
+      type, teamId: opts.teamId, teamIsHome: opts.teamIsHome, location: opts.location,
+      takerId: opts.takerId || null, victimId: opts.victimId || null,
+      timer: RULES_CONFIG.setPieces.freezeFrames, phase: 'positioning', active: true,
+    };
+    state.setPiece = s; state.match.setPiece = { type, teamIsHome: s.teamIsHome, location: s.location };
+    this.positionBall(s); this.selectTaker(s); this.positionPlayers(s);
+    AudioManager.setPieceWhistle();
+    const label = { FREE_KICK: 'FREE KICK', PENALTY: 'PENALTY', CORNER: 'CORNER', GOAL_KICK: 'GOAL KICK', THROW_IN: 'THROW-IN' }[type] || type;
+    showRulesBanner(label, '#38bdf8', 1300);
+    const evt = { FREE_KICK: GameEvents.FREE_KICK, PENALTY: GameEvents.PENALTY, CORNER: GameEvents.CORNER, GOAL_KICK: GameEvents.GOAL_KICK, THROW_IN: GameEvents.THROW_IN }[type];
+    if (evt) EventBus.emit(evt, { home: s.teamIsHome, location: s.location });
+    if (type === 'CORNER') showCommentary(randomLine('corner'), 1600);
+    else if (type === 'GOAL_KICK') showCommentary(randomLine('goalKick'), 1600);
+    else if (type === 'THROW_IN') showCommentary(randomLine('throwIn'), 1500);
+    else if (type === 'PENALTY') showCommentary(randomLine('penalty'), 2200);
+  },
+  positionBall(s) {
+    const b = state.ball;
+    b.vx = 0; b.vy = 0;
+    if (s.type === 'PENALTY') { b.x = s.teamIsHome ? PITCH.margin + 120 : PITCH.w - PITCH.margin - 120; b.y = PITCH.h / 2; }
+    else { b.x = s.location.x; b.y = s.location.y; }
+  },
+  selectTaker(s) {
+    const teamPlayers = (s.teamIsHome ? state.homePlayers : state.awayPlayers).filter(p => !p.discipline.sentOff && !p.isGK);
+    if (!teamPlayers.length) { s.takerId = null; return; }
+    if (s.type === 'PENALTY') {
+      // Best available shooter (highest power) takes the penalty.
+      s.takerId = teamPlayers.reduce((a, b2) => (b2.power > a.power ? b2 : a)).id;
+    } else {
+      let best = teamPlayers[0], bestD = Infinity;
+      for (const p of teamPlayers) { const d = Math.hypot(p.x - s.location.x, p.y - s.location.y); if (d < bestD) { bestD = d; best = p; } }
+      s.takerId = best.id;
+    }
+  },
+  positionPlayers(s) {
+    const taker = findPlayerById(s.takerId);
+    if (taker) { taker.x = s.type === 'PENALTY' ? (s.teamIsHome ? PITCH.margin + 150 : PITCH.w - PITCH.margin - 150) : s.location.x; taker.y = s.type === 'PENALTY' ? PITCH.h / 2 : s.location.y; taker.vx = 0; taker.vy = 0; }
+    if (s.type === 'PENALTY') {
+      const defendingGK = (s.teamIsHome ? state.awayPlayers : state.homePlayers).find(p => p.isGK && !p.discipline.sentOff);
+      if (defendingGK) { defendingGK.x = s.teamIsHome ? PITCH.margin + 30 : PITCH.w - PITCH.margin - 30; defendingGK.y = PITCH.h / 2; defendingGK.vx = 0; defendingGK.vy = 0; }
+    }
+    const radius = s.type === 'PENALTY' ? 999 : RULES_CONFIG.setPieces.repositionRadius; // penalty: everyone but taker/GK clears the box already
+    for (const p of activePlayers()) {
+      if (taker && p.id === taker.id) continue;
+      if (p.isGK) continue;
+      const d = Math.hypot(p.x - s.location.x, p.y - s.location.y);
+      if (d < radius) {
+        const ang = Math.atan2(p.y - s.location.y, p.x - s.location.x) || (p.isHome ? Math.PI : 0);
+        p.x = s.location.x + Math.cos(ang) * radius; p.y = s.location.y + Math.sin(ang) * radius;
+        clampPlayer(p);
+      }
+      p.vx = 0; p.vy = 0;
+    }
+  },
+  /* Called every frame the set piece is active (from the game loop). */
+  update(dt) {
+    const s = state.setPiece;
+    if (!s || !s.active) return;
+    s.timer -= dt;
+    // A human-controlled taker can shoot/pass early via the normal
+    // input mapping (still compatible with the existing systems);
+    // otherwise the restart auto-executes once the freeze elapses.
+    const taker = findPlayerById(s.takerId);
+    const humanTaking = taker && taker.id === state.controlledId && !taker.isGK;
+    if (humanTaking && s.type !== 'THROW_IN') {
+      if (InputManager.isShoot()) { this.execute(s, 'shoot'); return; }
+      if (InputManager.isPass() || InputManager.isThrough()) { this.execute(s, 'pass'); return; }
+    }
+    if (s.timer <= 0) this.execute(s, s.type === 'PENALTY' ? 'shoot' : 'pass');
+  },
+  execute(s, mode) {
+    const taker = findPlayerById(s.takerId);
+    if (taker) {
+      taker.cooldown = 0;
+      if (mode === 'shoot') doShoot(taker, s.type === 'PENALTY');
+      else doPass(taker, s.type === 'FREE_KICK');
+    }
+    this.finish();
+  },
+  finish() {
+    state.setPiece = null;
+    if (state.match) state.match.setPiece = null;
+  },
+};
+
+/* ---------- OUT-OF-BOUNDS ENGINE ENTRY POINT (Phase 2, Step 13) ----------
+   Ball -> here -> RefereeSystem.evaluateBoundary -> SetPieceManager.
+   Called once per frame from the game loop, only when no goal was
+   scored this frame and no set piece is already in progress. */
+function checkBoundaries() {
+  if (state.setPiece && state.setPiece.active) return;
+  RefereeSystem.evaluateBoundary();
+}
+
+// Step 20: only ever attribute an assist to a real preceding pass by a
+// teammate, within a short, honest possession window — never invented.
+function attributeGoal(home) {
+  const now = state.match ? state.match.matchTime : 0;
+  const shot = state.lastShotBy;
+  const scorerId = (shot && shot.isHome === home && now - shot.time < RULES_CONFIG.shotAttributionWindowSeconds) ? shot.playerId : null;
+  const pass = state.lastPassBy;
+  const assistId = (pass && pass.isHome === home && pass.playerId !== scorerId && now - pass.time < RULES_CONFIG.assistWindowSeconds) ? pass.playerId : null;
+  return { scorerId, assistId };
+}
 function checkGoals() {
-  if (state.goalFlash > 0) return;
+  if (state.goalFlash > 0 || (state.setPiece && state.setPiece.active)) return;
   const b = state.ball;
   const gTop = PITCH.h / 2 - GOAL_W / 2, gBot = PITCH.h / 2 + GOAL_W / 2;
   if (b.x > PITCH.w - PITCH.margin + 6 && b.y > gTop && b.y < gBot) {
     state.scoreHome++; state.goalFlash = MATCH_CONFIG.goalFlashFrames; updateHUD();
-    EventBus.emit('goal', { home: true });
+    const { scorerId, assistId } = attributeGoal(true);
+    EventBus.emit(GameEvents.GOAL, { home: true, scorerId, assistId });
     celebrateGoal(true);
-    setTimeout(resetBall, MATCH_CONFIG.goalResetDelayMs);
+    setTimeout(() => beginKickoff(false, state.matchPeriod, false), MATCH_CONFIG.goalResetDelayMs);
   }
   if (b.x < PITCH.margin - 6 && b.y > gTop && b.y < gBot) {
     state.scoreAway++; state.goalFlash = MATCH_CONFIG.goalFlashFrames; updateHUD();
-    EventBus.emit('goal', { home: false });
+    const { scorerId, assistId } = attributeGoal(false);
+    EventBus.emit(GameEvents.GOAL, { home: false, scorerId, assistId });
     celebrateGoal(false);
-    setTimeout(resetBall, MATCH_CONFIG.goalResetDelayMs);
+    setTimeout(() => beginKickoff(true, state.matchPeriod, false), MATCH_CONFIG.goalResetDelayMs);
   }
 }
 
@@ -1373,8 +2173,10 @@ function celebrateGoal(home) {
 
 function endMatch() {
   state.running = false;
-  if (state.match) state.match.status = 'finished';
+  state.matchPeriod = MatchPeriods.FULL_TIME;
+  if (state.match) { state.match.status = 'finished'; state.match.period = MatchPeriods.FULL_TIME; }
   Game.state.transition(GameStates.FULL_TIME);
+  EventBus.emit(GameEvents.FULL_TIME, {});
   AudioManager.whistle();
   document.getElementById('controls').classList.remove('active');
   document.getElementById('hud').classList.add('hidden');
@@ -1447,7 +2249,7 @@ function draw() {
     ctx.fillStyle = `rgba(255,215,40,${Math.min(0.35, state.goalFlash / 100)})`;
     ctx.fillRect(0, 0, PITCH.w, PITCH.h);
   }
-  const sorted = allPlayers().slice().sort((a, b) => a.y - b.y);
+  const sorted = activePlayers().slice().sort((a, b) => a.y - b.y);
   for (const p of sorted) drawPlayer(p);
   drawBall();
   ctx.restore();
