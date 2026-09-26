@@ -252,6 +252,27 @@
         <div class="opt-chip" data-val="11">11v11</div>
       </div>
     </div>
+    <div class="panel">
+      <h2>Your Tactics <span style="color:#8b9bb4;font-weight:400">(11v11 uses the formation shape; mentality/style apply to any size)</span></h2>
+      <div class="match-opts" id="formation-opts">
+        <div class="opt-chip" data-val="4-3-3">4-3-3</div>
+        <div class="opt-chip" data-val="4-4-2">4-4-2</div>
+        <div class="opt-chip" data-val="4-2-3-1">4-2-3-1</div>
+        <div class="opt-chip" data-val="3-5-2">3-5-2</div>
+        <div class="opt-chip" data-val="5-3-2">5-3-2</div>
+      </div>
+      <div class="match-opts" id="mentality-opts" style="margin-top:8px">
+        <div class="opt-chip" data-val="DEFENSIVE">Defensive</div>
+        <div class="opt-chip" data-val="BALANCED">Balanced</div>
+        <div class="opt-chip" data-val="ATTACKING">Attacking</div>
+      </div>
+      <div class="match-opts" id="style-opts" style="margin-top:8px">
+        <div class="opt-chip" data-val="POSSESSION">Possession</div>
+        <div class="opt-chip" data-val="COUNTER_ATTACK">Counter Attack</div>
+        <div class="opt-chip" data-val="PRESSING">Pressing</div>
+        <div class="opt-chip" data-val="LOW_BLOCK">Low Block</div>
+      </div>
+    </div>
     <button class="btn" id="btn-to-players">Next: Choose Players</button>
   </div>
 
@@ -375,6 +396,13 @@ const GameEvents = Object.freeze({
   SECOND_HALF: 'secondHalf',
   FULL_TIME: 'fullTime',
   SAVE: 'save',
+  // Phase 3, Step 18
+  FORMATION_CHANGED: 'formationChanged',
+  MENTALITY_CHANGED: 'mentalityChanged',
+  STYLE_CHANGED: 'styleChanged',
+  TACTICAL_STATE_CHANGED: 'tacticalStateChanged',
+  PRESS_TRIGGERED: 'pressTriggered',
+  FORMATION_ADAPTED: 'formationAdapted',
 });
 
 /* ---------- CONFIGURATION (Step 4) ----------
@@ -483,6 +511,7 @@ const DEFAULT_SETTINGS = {
   difficulty: 'normal',
   graphics: 'standard',
   controlSensitivity: 1,
+  tactics: { formationId: '4-3-3', mentality: 'BALANCED', style: 'POSSESSION' }, // Phase 3, Step 17 (kept as literals: TACTICS_CONFIG consts are declared later in the file)
 };
 
 /* ---------- FOOTBALL RULES CONFIGURATION (Phase 2, Step 27) ----------
@@ -548,6 +577,117 @@ const RULES_CONFIG = {
   assistWindowSeconds: 6,
   shotAttributionWindowSeconds: 3,
 };
+
+/* ---------- TACTICAL CONFIGURATION (Phase 3, Steps 2-6, 10-11) ----------
+   Extends the config architecture rather than hard-coding per-formation
+   behavior. Every formation is the same reusable slot-template shape;
+   roles/mentality/style are modifier tables the existing AI consults
+   instead of a parallel tactical AI.
+
+   Anchor coordinates are normalized to the team's OWN attacking
+   direction: x=0 is this team's own goal line, x=1 is the opponent's
+   goal line; y=0..1 is across the pitch width. TacticalSystem mirrors
+   these into real pitch coordinates for home (attacks +x) vs away
+   (attacks -x). */
+const FORMATIONS = {
+  '4-3-3': {
+    id: '4-3-3', name: '4-3-3', width: 0.86, defensiveLine: 0.28, attackingSpacing: 0.82,
+    slots: [
+      { role: 'GK', x: 0.04, y: 0.50 },
+      { role: 'LB', x: 0.24, y: 0.14 }, { role: 'CB', x: 0.20, y: 0.36 },
+      { role: 'CB', x: 0.20, y: 0.64 }, { role: 'RB', x: 0.24, y: 0.86 },
+      { role: 'CM', x: 0.46, y: 0.30 }, { role: 'DM', x: 0.42, y: 0.50 }, { role: 'CM', x: 0.46, y: 0.70 },
+      { role: 'LW', x: 0.78, y: 0.16 }, { role: 'ST', x: 0.84, y: 0.50 }, { role: 'RW', x: 0.78, y: 0.84 },
+    ],
+  },
+  '4-4-2': {
+    id: '4-4-2', name: '4-4-2', width: 0.90, defensiveLine: 0.30, attackingSpacing: 0.76,
+    slots: [
+      { role: 'GK', x: 0.04, y: 0.50 },
+      { role: 'LB', x: 0.24, y: 0.14 }, { role: 'CB', x: 0.20, y: 0.36 },
+      { role: 'CB', x: 0.20, y: 0.64 }, { role: 'RB', x: 0.24, y: 0.86 },
+      { role: 'LW', x: 0.52, y: 0.14 }, { role: 'CM', x: 0.48, y: 0.38 },
+      { role: 'CM', x: 0.48, y: 0.62 }, { role: 'RW', x: 0.52, y: 0.86 },
+      { role: 'ST', x: 0.82, y: 0.38 }, { role: 'ST', x: 0.82, y: 0.62 },
+    ],
+  },
+  '4-2-3-1': {
+    id: '4-2-3-1', name: '4-2-3-1', width: 0.84, defensiveLine: 0.26, attackingSpacing: 0.84,
+    slots: [
+      { role: 'GK', x: 0.04, y: 0.50 },
+      { role: 'LB', x: 0.24, y: 0.14 }, { role: 'CB', x: 0.20, y: 0.36 },
+      { role: 'CB', x: 0.20, y: 0.64 }, { role: 'RB', x: 0.24, y: 0.86 },
+      { role: 'DM', x: 0.38, y: 0.38 }, { role: 'DM', x: 0.38, y: 0.62 },
+      { role: 'LW', x: 0.66, y: 0.16 }, { role: 'AM', x: 0.62, y: 0.50 }, { role: 'RW', x: 0.66, y: 0.84 },
+      { role: 'ST', x: 0.86, y: 0.50 },
+    ],
+  },
+  '3-5-2': {
+    id: '3-5-2', name: '3-5-2', width: 0.92, defensiveLine: 0.26, attackingSpacing: 0.80,
+    slots: [
+      { role: 'GK', x: 0.04, y: 0.50 },
+      { role: 'CB', x: 0.20, y: 0.28 }, { role: 'CB', x: 0.18, y: 0.50 }, { role: 'CB', x: 0.20, y: 0.72 },
+      { role: 'LWB', x: 0.50, y: 0.06 }, { role: 'CM', x: 0.46, y: 0.34 },
+      { role: 'DM', x: 0.40, y: 0.50 }, { role: 'CM', x: 0.46, y: 0.66 }, { role: 'RWB', x: 0.50, y: 0.94 },
+      { role: 'ST', x: 0.82, y: 0.40 }, { role: 'ST', x: 0.82, y: 0.60 },
+    ],
+  },
+  '5-3-2': {
+    id: '5-3-2', name: '5-3-2', width: 0.94, defensiveLine: 0.24, attackingSpacing: 0.74,
+    slots: [
+      { role: 'GK', x: 0.04, y: 0.50 },
+      { role: 'LWB', x: 0.30, y: 0.08 }, { role: 'CB', x: 0.18, y: 0.30 },
+      { role: 'CB', x: 0.16, y: 0.50 }, { role: 'CB', x: 0.18, y: 0.70 }, { role: 'RWB', x: 0.30, y: 0.92 },
+      { role: 'CM', x: 0.44, y: 0.32 }, { role: 'DM', x: 0.40, y: 0.50 }, { role: 'CM', x: 0.44, y: 0.68 },
+      { role: 'ST', x: 0.80, y: 0.40 }, { role: 'ST', x: 0.80, y: 0.60 },
+    ],
+  },
+};
+const FORMATION_IDS = Object.keys(FORMATIONS);
+const DEFAULT_FORMATION_ID = '4-3-3';
+
+/* Step 4: role behavior modifiers. Values are multipliers/offsets the
+   AI applies on top of its existing speed/engage numbers — a role
+   never replaces the underlying physics/AI_CONFIG values. */
+const ROLE_DEFS = {
+  GK:  { band: 'gk',  moveRange: 0.10, pressing: 0.0, support: 0.0, widthBias: 0.0, shootBias: 0.0 },
+  CB:  { band: 'def', moveRange: 0.16, pressing: 0.35, support: 0.25, widthBias: 0.0, shootBias: 0.05 },
+  LB:  { band: 'def', moveRange: 0.30, pressing: 0.45, support: 0.45, widthBias: -0.35, shootBias: 0.05 },
+  RB:  { band: 'def', moveRange: 0.30, pressing: 0.45, support: 0.45, widthBias: 0.35, shootBias: 0.05 },
+  LWB: { band: 'def', moveRange: 0.42, pressing: 0.5, support: 0.6, widthBias: -0.42, shootBias: 0.08 },
+  RWB: { band: 'def', moveRange: 0.42, pressing: 0.5, support: 0.6, widthBias: 0.42, shootBias: 0.08 },
+  DM:  { band: 'mid', moveRange: 0.24, pressing: 0.55, support: 0.4, widthBias: 0.0, shootBias: 0.15 },
+  CM:  { band: 'mid', moveRange: 0.32, pressing: 0.6, support: 0.6, widthBias: 0.0, shootBias: 0.25 },
+  AM:  { band: 'mid', moveRange: 0.34, pressing: 0.55, support: 0.7, widthBias: 0.0, shootBias: 0.4 },
+  LW:  { band: 'fwd', moveRange: 0.36, pressing: 0.6, support: 0.65, widthBias: -0.4, shootBias: 0.45 },
+  RW:  { band: 'fwd', moveRange: 0.36, pressing: 0.6, support: 0.65, widthBias: 0.4, shootBias: 0.45 },
+  ST:  { band: 'fwd', moveRange: 0.30, pressing: 0.5, support: 0.5, widthBias: 0.0, shootBias: 0.6 },
+};
+
+/* Step 5: mentality modifiers. */
+const MENTALITY_DEFS = {
+  DEFENSIVE: { defensiveLineShift: -0.10, pressIntensity: 0.6, forwardBias: -0.12, supportDistance: 0.85, riskFactor: 0.7 },
+  BALANCED:  { defensiveLineShift: 0.0,  pressIntensity: 1.0, forwardBias: 0.0,   supportDistance: 1.0,  riskFactor: 1.0 },
+  ATTACKING: { defensiveLineShift: 0.12, pressIntensity: 1.3, forwardBias: 0.14,  supportDistance: 1.2,  riskFactor: 1.3 },
+};
+const DEFAULT_MENTALITY = 'BALANCED';
+
+/* Step 6: playing-style modifiers. */
+const STYLE_DEFS = {
+  POSSESSION:     { passSafetyBias: 1.0,  transitionSpeed: 0.8,  pressIntensity: 0.9, blockDepth: 1.0, forwardPassBias: -0.15 },
+  COUNTER_ATTACK: { passSafetyBias: 0.4,  transitionSpeed: 1.4,  pressIntensity: 0.85, blockDepth: 0.9, forwardPassBias: 0.35 },
+  PRESSING:       { passSafetyBias: 0.7,  transitionSpeed: 1.1,  pressIntensity: 1.4, blockDepth: 1.05, forwardPassBias: 0.1 },
+  LOW_BLOCK:      { passSafetyBias: 0.8,  transitionSpeed: 1.0,  pressIntensity: 0.55, blockDepth: 0.7, forwardPassBias: 0.25 },
+};
+const DEFAULT_STYLE = 'POSSESSION';
+
+const TACTICS_CONFIG = {
+  transitionWindowSeconds: 2.2,     // Step 12: how long TRANSITION lasts after a possession change
+  markRecalcIntervalFrames: 24,     // Step 10-11/19: recompute marking/pressing targets a few times a second, not every frame
+  pressJoinDistance: 190,           // how far from the ball a role's pressing radius can reach at pressing=1
+  maxMarkingRange: 260,             // defenders won't chase a marking target further than this from their anchor
+};
+const DEFAULT_SETTINGS_TACTICS = { formationId: DEFAULT_FORMATION_ID, mentality: DEFAULT_MENTALITY, style: DEFAULT_STYLE };
 
 /* ---------- GAME STATE MACHINE (Step 3) ----------
    Centralizes what used to be scattered booleans (state.running, screen
@@ -654,12 +794,17 @@ const SaveManager = {
 
 /* ---------- SETTINGS FOUNDATION (Step 12) ---------- */
 const SettingsManager = {
-  current: { ...DEFAULT_SETTINGS, audio: { ...DEFAULT_SETTINGS.audio } },
+  current: { ...DEFAULT_SETTINGS, audio: { ...DEFAULT_SETTINGS.audio }, tactics: { ...DEFAULT_SETTINGS.tactics } },
   load() {
     const saved = SaveManager.load(true);
     this.current = saved && saved.settings && Object.keys(saved.settings).length
-      ? { ...DEFAULT_SETTINGS, ...saved.settings, audio: { ...DEFAULT_SETTINGS.audio, ...(saved.settings.audio || {}) } }
-      : { ...DEFAULT_SETTINGS, audio: { ...DEFAULT_SETTINGS.audio } };
+      ? { ...DEFAULT_SETTINGS, ...saved.settings,
+          audio: { ...DEFAULT_SETTINGS.audio, ...(saved.settings.audio || {}) },
+          tactics: { ...DEFAULT_SETTINGS_TACTICS, ...(saved.settings.tactics || {}) } }
+      : { ...DEFAULT_SETTINGS, audio: { ...DEFAULT_SETTINGS.audio }, tactics: { ...DEFAULT_SETTINGS_TACTICS } };
+    if (!FORMATION_IDS.includes(this.current.tactics.formationId)) this.current.tactics.formationId = DEFAULT_FORMATION_ID;
+    if (!MENTALITY_DEFS[this.current.tactics.mentality]) this.current.tactics.mentality = DEFAULT_MENTALITY;
+    if (!STYLE_DEFS[this.current.tactics.style]) this.current.tactics.style = DEFAULT_STYLE;
     return this.current;
   },
   persist() { SaveManager.save({ settings: this.current }); },
@@ -878,6 +1023,12 @@ let state = {
   possession: { team: null, homeMs: 0, awayMs: 0 },
   setPiece: null,         // active SetPieceManager state, or null
   nextFoulEventId: 1,
+  // ---- Phase 3: tactical state ----
+  homeTactics: { formationId: DEFAULT_FORMATION_ID, mentality: DEFAULT_MENTALITY, style: DEFAULT_STYLE },
+  awayTactics: { formationId: '4-4-2', mentality: DEFAULT_MENTALITY, style: 'COUNTER_ATTACK' }, // fixed AI-only default; not user-editable in Phase 3
+  tacticalPhase: { home: 'DEFENDING', away: 'ATTACKING', homeSince: 0, awaySince: 0 }, // Step 12
+  markRecalcTimer: 0,
+  pressEmitCooldowns: {}, // playerId -> last PRESS_TRIGGERED emit time(ms), avoids event spam
 };
 
 /* ---------- INPUT SYSTEM (Step 10) ----------
@@ -1108,6 +1259,37 @@ buildTeamSelect('team-select', true);
 buildTeamSelect('away-select', false);
 setupChips('duration-opts', 'duration');
 setupChips('size-opts', 'teamSize');
+
+/* ---------- TACTICS UI (Phase 3, Step 16) ----------
+   Pre-kickoff panel only (per-match set-piece/halftime tactical
+   overlays were judged out of scope for this phase — see Known
+   Limitations in the report). Reuses the same .opt-chip pattern as
+   duration/size so it stays visually consistent with the existing UI. */
+function syncTacticsUI() {
+  const sync = (id, val) => {
+    document.getElementById(id).querySelectorAll('.opt-chip').forEach(c => {
+      c.classList.toggle('selected', c.dataset.val === val);
+    });
+  };
+  sync('formation-opts', state.homeTactics.formationId);
+  sync('mentality-opts', state.homeTactics.mentality);
+  sync('style-opts', state.homeTactics.style);
+}
+function setupTacticChips(id, key, evt) {
+  document.getElementById(id).querySelectorAll('.opt-chip').forEach(chip => {
+    chip.onclick = () => {
+      document.getElementById(id).querySelectorAll('.opt-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      state.homeTactics[key] = chip.dataset.val;
+      SettingsManager.current.tactics = { ...state.homeTactics };
+      SettingsManager.persist();
+      EventBus.emit(evt, { home: true, [key]: chip.dataset.val }); // Step 18: fires only on an actual user change, never per-frame
+    };
+  });
+}
+setupTacticChips('formation-opts', 'formationId', GameEvents.FORMATION_CHANGED);
+setupTacticChips('mentality-opts', 'mentality', GameEvents.MENTALITY_CHANGED);
+setupTacticChips('style-opts', 'style', GameEvents.STYLE_CHANGED);
 
 document.getElementById('btn-to-players').onclick = () => {
   AudioManager.ensure();
@@ -1358,6 +1540,8 @@ function createTeams() {
   const formA = formation(size, false);
   state.homePlayers = homeData.map((p, i) => makePlayer(p, state.homeTeam, formH[i], true));
   state.awayPlayers = awayData.map((p, i) => makePlayer(p, state.awayTeam, formA[i], false));
+  TacticalSystem.assignRoles(state.homePlayers, true);
+  TacticalSystem.assignRoles(state.awayPlayers, false);
 }
 
 function formation(n, home) {
@@ -1398,6 +1582,7 @@ function makePlayer(data, team, pos, isHome) {
     profile: buildPlayerProfile(data, team.id),
     discipline: buildDiscipline(),       // Phase 2, Step 6
     matchStats: buildPlayerMatchStats(), // Phase 2, Step 18
+    role: null, tacticalAnchor: null,    // Phase 3: assigned by TacticalSystem.assignRoles() right after creation
   };
 }
 
@@ -1591,6 +1776,9 @@ function runIntegrityCheck(dt) {
   const activeHome = state.homePlayers.filter(p => !p.discipline.sentOff).length;
   const activeAway = state.awayPlayers.filter(p => !p.discipline.sentOff).length;
   if (activeHome < 1 || activeAway < 1) console.warn('[Integrity] a team has no active players left', { activeHome, activeAway });
+  // Phase 3, Step 20: tactical data validation.
+  if (state.homePlayers.length) TacticalSystem.validate(state.homePlayers).forEach(msg => console.warn('[Integrity][tactics]', msg));
+  if (state.awayPlayers.length) TacticalSystem.validate(state.awayPlayers).forEach(msg => console.warn('[Integrity][tactics]', msg));
 }
 
 function updateControlled(dt) {
@@ -1710,9 +1898,31 @@ function doTackle(p) {
   }
 }
 
+// Step 9: modest AI-to-AI passing. AI previously only ever dribbled into
+// shooting range or stood still; this lets a tactically "in possession"
+// AI player under pressure or without a shot actually circulate the
+// ball, using the existing doPass() mechanics (never a parallel one).
+function maybeAIPass(p, teammates, dt) {
+  const b = state.ball;
+  if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r + PLAYER_CONFIG.passRange) return false;
+  const style = TacticalSystem.getStyle(p.isHome);
+  const chance = 0.05 * style.transitionSpeed * dt;
+  if (Math.random() >= chance) return false;
+  const target = nearestTeammate(p, teammates);
+  if (!target) return false;
+  doPass(p, style.forwardPassBias > 0.2 && Math.random() < 0.5);
+  return true;
+}
+
 function updateAI(dt) {
   const ball = state.ball;
+  TacticalSystem.updateTransitions(dt); // Step 12
+  state.markRecalcTimer += dt;
+  const recalcMarks = state.markRecalcTimer >= TACTICS_CONFIG.markRecalcIntervalFrames;
+  if (recalcMarks) state.markRecalcTimer = 0;
+
   const A = AI_CONFIG.away;
+  const awayPressers = TacticalSystem.selectPressers(state.awayPlayers, ball, A.engageDist, 3); // Step 10
   for (const p of state.awayPlayers) {
     if (p.discipline.sentOff) continue; // Step 25: AI must not move a sent-off player
     if (p.stunned > 0) { p.stunned -= dt; p.vx *= 0.88; p.vy *= 0.88; continue; }
@@ -1720,9 +1930,18 @@ function updateAI(dt) {
     if (p.isGK) { updateGK(p, dt, false); continue; }
     const distBall = Math.hypot(ball.x - p.x, ball.y - p.y);
     let tx, ty;
-    if (distBall < A.engageDist || ball.x < A.engageBallX) { tx = ball.x; ty = ball.y; }
-    else if (p.pos === 'DF') { tx = A.defendTargetX; ty = ball.y * 0.5 + PITCH.h / 2 * 0.5; }
-    else { tx = A.midTargetX; ty = 180 + (p.id % 4) * 120; }
+    if (distBall < A.engageDist || ball.x < A.engageBallX || awayPressers.has(p.id)) { tx = ball.x; ty = ball.y; }
+    else {
+      const anchor = TacticalSystem.anchorTarget(p, ball); // Step 7: role/formation/mentality/style-aware target
+      if (anchor) {
+        tx = anchor.tx; ty = anchor.ty;
+        if (recalcMarks && (p.role === 'CB' || p.role === 'LB' || p.role === 'RB') && state.tacticalPhase.away !== 'ATTACKING') {
+          const mark = TacticalSystem.pickMarkTarget(p, state.homePlayers); // Step 11
+          if (mark) { tx = (tx + mark.x) / 2; ty = (ty + mark.y) / 2; }
+        }
+      } else if (p.pos === 'DF') { tx = A.defendTargetX; ty = ball.y * 0.5 + PITCH.h / 2 * 0.5; }
+      else { tx = A.midTargetX; ty = 180 + (p.id % 4) * 120; }
+    }
     moveToward(p, tx, ty, A.speedBase + p.speed / 100 * A.speedScale, dt);
     if (distBall < p.r + ball.r + A.shootRange && p.cooldown <= 0) {
       const ang = Math.atan2(PITCH.h / 2 - p.y, 40 - p.x);
@@ -1734,9 +1953,12 @@ function updateAI(dt) {
         state.lastShotBy = { playerId: p.id, isHome: false, time: state.match ? state.match.matchTime : 0 };
         EventBus.emit(GameEvents.SHOT, { home: false, onTarget: true, playerId: p.id });
       }
+    } else if (p.cooldown <= 0 && distBall < 40) {
+      maybeAIPass(p, state.awayPlayers, dt);
     }
   }
   const H = AI_CONFIG.home;
+  const homePressers = TacticalSystem.selectPressers(state.homePlayers.filter(p => p.id !== state.controlledId), ball, H.engageDist, 2); // Step 10
   for (const p of state.homePlayers) {
     if (p.discipline.sentOff) continue; // Step 25
     if (p.id === state.controlledId) continue;
@@ -1745,11 +1967,20 @@ function updateAI(dt) {
     if (p.isGK) { updateGK(p, dt, true); continue; }
     const distBall = Math.hypot(ball.x - p.x, ball.y - p.y);
     let tx, ty;
-    if (distBall < H.engageDist) { tx = ball.x; ty = ball.y; }
+    if (distBall < H.engageDist || homePressers.has(p.id)) { tx = ball.x; ty = ball.y; }
     else {
-      const idx = state.homePlayers.indexOf(p);
-      const fp = formation(state.teamSize, true)[idx];
-      tx = fp.x + (ball.x - 640) * H.formationPullX; ty = fp.y + (ball.y - 360) * H.formationPullY;
+      const anchor = TacticalSystem.anchorTarget(p, ball); // Step 7
+      if (anchor) {
+        tx = anchor.tx; ty = anchor.ty;
+        if (recalcMarks && (p.role === 'CB' || p.role === 'LB' || p.role === 'RB') && state.tacticalPhase.home !== 'ATTACKING') {
+          const mark = TacticalSystem.pickMarkTarget(p, state.awayPlayers); // Step 11
+          if (mark) { tx = (tx + mark.x) / 2; ty = (ty + mark.y) / 2; }
+        }
+      } else {
+        const idx = state.homePlayers.indexOf(p);
+        const fp = formation(state.teamSize, true)[idx];
+        tx = fp.x + (ball.x - 640) * H.formationPullX; ty = fp.y + (ball.y - 360) * H.formationPullY;
+      }
     }
     moveToward(p, tx, ty, H.speedBase + p.speed / 100 * H.speedScale, dt);
     if (distBall < p.r + ball.r + H.shootRange && p.cooldown <= 0 && Math.random() < H.shootChancePerDt * dt) {
@@ -1760,6 +1991,8 @@ function updateAI(dt) {
       state.lastTouch = { isHome: true, playerId: p.id };
       state.lastShotBy = { playerId: p.id, isHome: true, time: state.match ? state.match.matchTime : 0 };
       EventBus.emit(GameEvents.SHOT, { home: true, onTarget: true, playerId: p.id });
+    } else if (p.cooldown <= 0 && distBall < 40) {
+      maybeAIPass(p, state.homePlayers, dt);
     }
   }
 }
@@ -1849,6 +2082,209 @@ function resolveCollisions() {
     }
   }
 }
+
+/* =====================================================================
+   TACTICAL SYSTEM (Phase 3)
+   The single tactical authority the existing AI consults — not a
+   parallel AI. It answers three questions for any player: "where
+   should you be right now" (role + formation + mentality + style +
+   ball position), "should you press or hold shape" (pressing), and
+   "who should you mark" (defensive zone marking). updateAI() calls
+   into this instead of duplicating tactical logic inline.
+   ===================================================================== */
+const TacticalSystem = {
+  /* Step 3, 5, 6: current tactics for a side. Home is user-editable via
+     the UI; away is a fixed AI-only profile so the opponent still plays
+     with a real identity without exposing a second control panel. */
+  getTactics(isHome) { return isHome ? state.homeTactics : state.awayTactics; },
+  getFormation(isHome) { return FORMATIONS[this.getTactics(isHome).formationId] || FORMATIONS[DEFAULT_FORMATION_ID]; },
+  getMentality(isHome) { return MENTALITY_DEFS[this.getTactics(isHome).mentality] || MENTALITY_DEFS[DEFAULT_MENTALITY]; },
+  getStyle(isHome) { return STYLE_DEFS[this.getTactics(isHome).style] || STYLE_DEFS[DEFAULT_STYLE]; },
+
+  /* Step 4: assign each active player a role (and, for 11-a-side, a
+     formation slot anchor). Bucketed by band so a forward is never
+     handed a center-back's slot just because of array order. Called
+     once at kickoff and again whenever the roster shrinks (red card)
+     or the formation changes, never per-frame. */
+  assignRoles(players, isHome) {
+    const active = players.filter(p => !p.discipline.sentOff);
+    const bandOf = (pos) => pos === 'GK' ? 'gk' : pos === 'DF' ? 'def' : pos === 'MF' ? 'mid' : 'fwd';
+    if (players.length === 11) {
+      const formationDef = this.getFormation(isHome);
+      // Keep the strongest XI's worth of slots, trimming from the
+      // attacking end first if a red card has reduced the side below 11
+      // (Step 14: dynamic compensation without inventing a new player).
+      const slots = formationDef.slots.slice(0, active.length);
+      const byBand = { gk: [], def: [], mid: [], fwd: [] };
+      for (const p of active) byBand[bandOf(p.pos)].push(p);
+      const slotsByBand = { gk: [], def: [], mid: [], fwd: [] };
+      for (const s of slots) slotsByBand[ROLE_DEFS[s.role] ? ROLE_DEFS[s.role].band : 'mid'].push(s);
+      const usedSlots = new Set();
+      const assign = (band) => {
+        const ps = byBand[band], ss = slotsByBand[band].filter(s => !usedSlots.has(s));
+        const n = Math.min(ps.length, ss.length);
+        for (let i = 0; i < n; i++) { ps[i].role = ss[i].role; ps[i].tacticalAnchor = { x: ss[i].x, y: ss[i].y }; usedSlots.add(ss[i]); }
+        return { leftoverPlayers: ps.slice(n), leftoverSlots: ss.slice(n) };
+      };
+      const gk = assign('gk'), def = assign('def'), mid = assign('mid'), fwd = assign('fwd');
+      // Anyone left over (squad shape doesn't perfectly match the formation
+      // template) takes any remaining slot rather than getting no anchor.
+      const leftoverPlayers = [...gk.leftoverPlayers, ...def.leftoverPlayers, ...mid.leftoverPlayers, ...fwd.leftoverPlayers];
+      const leftoverSlots = [...gk.leftoverSlots, ...def.leftoverSlots, ...mid.leftoverSlots, ...fwd.leftoverSlots];
+      for (let i = 0; i < Math.min(leftoverPlayers.length, leftoverSlots.length); i++) {
+        leftoverPlayers[i].role = leftoverSlots[i].role; leftoverPlayers[i].tacticalAnchor = { x: leftoverSlots[i].x, y: leftoverSlots[i].y };
+      }
+    } else {
+      // Step 4 (5v5/7v7): generic role per position, no fixed formation
+      // slot — mentality/style still apply, positioning stays on the
+      // existing Phase 1/2 formation() layout to keep those sizes exactly
+      // as tested (Step 21 regression protection).
+      const generic = { GK: 'GK', DF: 'CB', MF: 'CM', FW: 'ST' };
+      for (const p of active) { p.role = generic[p.pos] || 'CM'; p.tacticalAnchor = null; }
+    }
+  },
+
+  /* Step 7: tactical target position for an 11-a-side player with a
+     formation anchor. Mirrors the normalized slot for home (attacks +x)
+     vs away (attacks -x), applies the mentality's line shift and the
+     style's block depth, then pulls toward the ball by the role's
+     support factor — the same idea as Phase 2's formationPullX/Y, now
+     role/mentality/style-aware instead of one fixed constant. */
+  anchorTarget(p, ball) {
+    if (!p.tacticalAnchor) return null;
+    const mentality = this.getMentality(p.isHome), style = this.getStyle(p.isHome), role = ROLE_DEFS[p.role] || ROLE_DEFS.CM;
+    const playW = PITCH.w - 2 * PITCH.margin, playH = PITCH.h - 2 * PITCH.margin;
+    let nx = p.tacticalAnchor.x, ny = p.tacticalAnchor.y;
+    // Depth: shift up-field with mentality, compress/expand with style block depth.
+    nx = 0.5 + (nx - 0.5) * style.blockDepth + mentality.defensiveLineShift * (role.band === 'gk' ? 0 : 1);
+    nx = Math.max(0.03, Math.min(0.97, nx));
+    const px = p.isHome ? PITCH.margin + nx * playW : PITCH.w - PITCH.margin - nx * playW;
+    const py = PITCH.margin + ny * playH;
+    // Ball-relative pull: how much this role drifts toward the ball's
+    // side of the pitch, scaled by support + mentality's support distance.
+    const pull = role.support * mentality.supportDistance * 0.16;
+    const bx = px + (ball.x - PITCH.w / 2) * pull * (p.isHome ? 1 : -1) * -1 + (ball.x - PITCH.w / 2) * pull;
+    const by = py + (ball.y - PITCH.h / 2) * pull * 0.5;
+    return { tx: bx, ty: by };
+  },
+
+  /* Step 10: how far this role/mentality/style combo presses. A CB in a
+     LOW_BLOCK/DEFENSIVE setup barely presses; a CM in PRESSING/ATTACKING
+     presses hard. Multiplies the existing AI_CONFIG engage distances
+     rather than replacing them. */
+  pressingRadius(p, baseEngageDist) {
+    const role = ROLE_DEFS[p.role] || ROLE_DEFS.CM;
+    const mentality = this.getMentality(p.isHome), style = this.getStyle(p.isHome);
+    const factor = 0.55 + role.pressing * mentality.pressIntensity * style.pressIntensity * 0.75;
+    return baseEngageDist * Math.max(0.4, Math.min(2.2, factor));
+  },
+
+  /* Step 10: only a capped number of eligible players actually press the
+     ball at once (closest first); everyone else holds tactical shape.
+     Prevents the whole team swarming the ball. */
+  selectPressers(teamPlayers, ball, baseEngageDist, maxPressers) {
+    const eligible = teamPlayers
+      .filter(p => !p.isGK)
+      .map(p => ({ p, d: Math.hypot(p.x - ball.x, p.y - ball.y), r: this.pressingRadius(p, baseEngageDist) }))
+      .filter(e => e.d < e.r)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, maxPressers);
+    const pressingIds = new Set(eligible.map(e => e.p.id));
+    if (eligible.length) {
+      const now = performance.now();
+      const leader = eligible[0].p;
+      if (now - (state.pressEmitCooldowns[leader.id] || 0) > 4000) {
+        state.pressEmitCooldowns[leader.id] = now;
+        EventBus.emit(GameEvents.PRESS_TRIGGERED, { home: leader.isHome, playerId: leader.id });
+      }
+    }
+    return pressingIds;
+  },
+
+  /* Step 11: zone-aware marking — prioritizes a dangerous nearby
+     attacker in the defender's own zone over blindly chasing the ball.
+     Recalculated on a timer (state.markRecalcTimer), not every frame. */
+  pickMarkTarget(defender, opponents) {
+    let best = null, bestScore = -Infinity;
+    for (const o of opponents) {
+      if (o.discipline.sentOff) continue;
+      const d = Math.hypot(o.x - defender.x, o.y - defender.y);
+      if (d > TACTICS_CONFIG.maxMarkingRange) continue;
+      // Dangerous = advanced up the pitch toward this defender's goal
+      // (from the defender's own attacking-direction perspective).
+      const danger = defender.isHome ? o.x : (PITCH.w - o.x);
+      const score = danger - d * 0.6;
+      if (score > bestScore) { bestScore = score; best = o; }
+    }
+    return best;
+  },
+
+  /* Step 12: possession-change transitions. Reads the Phase 2 possession
+     tracker (already computed once per frame elsewhere) instead of
+     recomputing ball-owner state — cheap, and only emits an event on an
+     actual phase change, never every frame. */
+  updateTransitions(dt) {
+    const nowTeam = state.possession.team; // true=home has it, false=away, null=loose
+    if (nowTeam !== this._lastPossessionTeam) {
+      this._lastPossessionTeam = nowTeam;
+      const t = state.match ? state.match.matchTime : 0;
+      state.tacticalPhase.home = nowTeam === true ? 'ATTACKING' : nowTeam === false ? 'DEFENDING' : state.tacticalPhase.home;
+      state.tacticalPhase.away = nowTeam === false ? 'ATTACKING' : nowTeam === true ? 'DEFENDING' : state.tacticalPhase.away;
+      if (nowTeam !== null) {
+        state.tacticalPhase.home = 'TRANSITION'; state.tacticalPhase.away = 'TRANSITION';
+        state.tacticalPhase.homeSince = t; state.tacticalPhase.awaySince = t;
+        EventBus.emit(GameEvents.TACTICAL_STATE_CHANGED, { home: state.tacticalPhase.home, away: state.tacticalPhase.away });
+      }
+    }
+    const t = state.match ? state.match.matchTime : 0;
+    if (state.tacticalPhase.home === 'TRANSITION' && t - state.tacticalPhase.homeSince > TACTICS_CONFIG.transitionWindowSeconds) {
+      state.tacticalPhase.home = this._lastPossessionTeam === true ? 'ATTACKING' : 'DEFENDING';
+    }
+    if (state.tacticalPhase.away === 'TRANSITION' && t - state.tacticalPhase.awaySince > TACTICS_CONFIG.transitionWindowSeconds) {
+      state.tacticalPhase.away = this._lastPossessionTeam === false ? 'ATTACKING' : 'DEFENDING';
+    }
+  },
+  _lastPossessionTeam: undefined,
+
+  /* Step 9: style-aware pass-target scoring, layered on TOP of the
+     existing nearestTeammate() geometry (never replacing it) — and only
+     ever used for AI-initiated passes. Human passing (doPass called from
+     updateControlled) never passes a style, so player controls are
+     unchanged (Step 9 explicit requirement). */
+  scorePassCandidate(passer, candidate, baseScore) {
+    const style = this.getStyle(passer.isHome);
+    const forwardness = passer.isHome ? (candidate.x - passer.x) : (passer.x - candidate.x);
+    const pressureNearby = candidate.pressureCount || 0;
+    return baseScore - forwardness * style.forwardPassBias - pressureNearby * 18 * style.passSafetyBias;
+  },
+
+  /* Step 20: validate tactical data — used by runIntegrityCheck(). */
+  validate(players) {
+    const problems = [];
+    const seenSlots = new Set();
+    for (const p of players) {
+      if (p.discipline.sentOff) continue;
+      if (!ROLE_DEFS[p.role]) problems.push(`missing/invalid role for player ${p.id}`);
+      if (p.tacticalAnchor) {
+        const key = `${p.isHome}:${p.tacticalAnchor.x}:${p.tacticalAnchor.y}`;
+        if (seenSlots.has(key)) problems.push(`duplicate formation slot for player ${p.id}`);
+        seenSlots.add(key);
+      }
+    }
+    const t = this.getTactics(players[0] ? players[0].isHome : true);
+    if (!FORMATIONS[t.formationId]) problems.push(`invalid formationId ${t.formationId}`);
+    if (!MENTALITY_DEFS[t.mentality]) problems.push(`invalid mentality ${t.mentality}`);
+    if (!STYLE_DEFS[t.style]) problems.push(`invalid style ${t.style}`);
+    return problems;
+  },
+};
+
+// Step 14: a sent-off player is already excluded from assignRoles() via
+// activePlayers-style filtering inside it — re-run so the remaining
+// players redistribute across the (now smaller) formation.
+EventBus.on(GameEvents.RED_CARD, ({ home }) => {
+  TacticalSystem.assignRoles(home ? state.homePlayers : state.awayPlayers, home);
+});
 
 /* =====================================================================
    REFEREE SYSTEM (Phase 2, Steps 4-9, 14-16)
@@ -2309,6 +2745,8 @@ function lighten(hex, amt) {
 
 /* ---------- INIT ---------- */
 SettingsManager.load();
+state.homeTactics = { ...SettingsManager.current.tactics };
+syncTacticsUI();
 resize();
 if (window.speechSynthesis) window.speechSynthesis.getVoices();
 </script>
