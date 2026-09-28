@@ -67,6 +67,44 @@
   }
   #rules-banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
 
+  #match-menu-toggle {
+    position: absolute; top: 100px; left: 10px;
+    z-index: 50; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2);
+    color: #fff; border-radius: 8px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer;
+    pointer-events: auto; display: none;
+  }
+  #match-menu-toggle.active { display: block; }
+  #match-panel {
+    position: absolute; top: 60px; left: 4%; right: 4%; bottom: 210px;
+    background: rgba(8,14,22,0.94); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 14px; z-index: 45; pointer-events: auto;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #match-panel.hidden { display: none; }
+  #match-panel-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .mp-tab {
+    flex: 1; text-align: center; padding: 8px 4px; font-size: 0.75rem; font-weight: 700;
+    color: #8b9bb4; cursor: pointer;
+  }
+  .mp-tab.active { color: #00d4aa; border-bottom: 2px solid #00d4aa; }
+  #match-panel-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+  #match-panel-close {
+    position: absolute; top: 6px; right: 8px; color: #8b9bb4; font-size: 1.1rem;
+    cursor: pointer; z-index: 1; pointer-events: auto;
+  }
+  .mp-section.hidden { display: none; }
+  .mp-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 6px 8px; border-radius: 8px; border: 2px solid transparent;
+    background: rgba(255,255,255,0.04); margin-bottom: 5px; font-size: 0.72rem; cursor: pointer;
+  }
+  .mp-row.selected { border-color: #00d4aa; background: rgba(0,212,170,0.14); }
+  .mp-row.disabled { opacity: 0.4; cursor: not-allowed; }
+  .mp-row .mp-name { font-weight: 700; flex: 1; }
+  .mp-stamina-bar { width: 46px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.15); overflow: hidden; flex-shrink: 0; }
+  .mp-stamina-fill { height: 100%; }
+  #mp-sub-count { font-size: 0.7rem; color: #8b9bb4; margin-bottom: 6px; }
+
   #controls { position: absolute; inset: 0; z-index: 20; pointer-events: none; display: none; }
   #controls.active { display: block; }
 
@@ -210,6 +248,52 @@
   <div id="commentary"></div>
   <div id="goal-banner">GOAL!</div>
   <div id="rules-banner"></div>
+  <button id="match-menu-toggle">⚙ Squad</button>
+  <div id="match-panel" class="hidden">
+    <div id="match-panel-close">✕</div>
+    <div id="match-panel-tabs">
+      <div class="mp-tab active" data-tab="tactics">Tactics</div>
+      <div class="mp-tab" data-tab="bench">Bench</div>
+    </div>
+    <div id="match-panel-body">
+      <div class="mp-section" id="mp-tactics">
+        <div class="panel" style="margin:0 0 8px">
+          <h2 style="margin-bottom:6px">Formation</h2>
+          <div class="match-opts" id="im-formation-opts">
+            <div class="opt-chip" data-val="4-3-3">4-3-3</div>
+            <div class="opt-chip" data-val="4-4-2">4-4-2</div>
+            <div class="opt-chip" data-val="4-2-3-1">4-2-3-1</div>
+            <div class="opt-chip" data-val="3-5-2">3-5-2</div>
+            <div class="opt-chip" data-val="5-3-2">5-3-2</div>
+          </div>
+        </div>
+        <div class="panel" style="margin:0 0 8px">
+          <h2 style="margin-bottom:6px">Mentality</h2>
+          <div class="match-opts" id="im-mentality-opts">
+            <div class="opt-chip" data-val="DEFENSIVE">Defensive</div>
+            <div class="opt-chip" data-val="BALANCED">Balanced</div>
+            <div class="opt-chip" data-val="ATTACKING">Attacking</div>
+          </div>
+        </div>
+        <div class="panel" style="margin:0">
+          <h2 style="margin-bottom:6px">Style</h2>
+          <div class="match-opts" id="im-style-opts">
+            <div class="opt-chip" data-val="POSSESSION">Possession</div>
+            <div class="opt-chip" data-val="COUNTER_ATTACK">Counter Attack</div>
+            <div class="opt-chip" data-val="PRESSING">Pressing</div>
+            <div class="opt-chip" data-val="LOW_BLOCK">Low Block</div>
+          </div>
+        </div>
+      </div>
+      <div class="mp-section hidden" id="mp-bench">
+        <div id="mp-sub-count"></div>
+        <h2 style="color:#00d4aa;font-size:0.75rem;margin-bottom:6px">ON THE PITCH — tap to select who comes off</h2>
+        <div id="mp-onpitch-list"></div>
+        <h2 style="color:#00d4aa;font-size:0.75rem;margin:10px 0 6px">BENCH — tap to bring on</h2>
+        <div id="mp-bench-list"></div>
+      </div>
+    </div>
+  </div>
 
   <div id="controls">
     <div id="stick-zone">
@@ -347,6 +431,29 @@ const ALL_PLAYERS = [
   { id:18, name:'Saka', pos:'FW', speed:88, power:80, tackle:55, skill:88 },
   { id:19, name:'Kane', pos:'FW', speed:78, power:92, tackle:50, skill:90 },
   { id:20, name:'Odegaard', pos:'MF', speed:76, power:74, tackle:68, skill:91 },
+  // Phase 4, Step 4: squad depth so both sides can field a real bench
+  // (11v11 needs 11 starters + up to 7 subs per side). These are
+  // generic reserve-squad entries, not real athletes.
+  { id:21, name:'Reserve GK A', pos:'GK', speed:50, power:46, tackle:66, skill:70 },
+  { id:22, name:'Reserve GK B', pos:'GK', speed:53, power:44, tackle:64, skill:72 },
+  { id:23, name:'Squad CB A', pos:'DF', speed:68, power:80, tackle:84, skill:70 },
+  { id:24, name:'Squad CB B', pos:'DF', speed:66, power:78, tackle:82, skill:68 },
+  { id:25, name:'Squad LB A', pos:'DF', speed:78, power:66, tackle:76, skill:72 },
+  { id:26, name:'Squad RB A', pos:'DF', speed:80, power:68, tackle:78, skill:74 },
+  { id:27, name:'Squad CB C', pos:'DF', speed:64, power:76, tackle:80, skill:66 },
+  { id:28, name:'Squad WB A', pos:'DF', speed:82, power:64, tackle:74, skill:76 },
+  { id:29, name:'Squad DM A', pos:'MF', speed:66, power:74, tackle:82, skill:80 },
+  { id:30, name:'Squad CM A', pos:'MF', speed:74, power:70, tackle:70, skill:82 },
+  { id:31, name:'Squad CM B', pos:'MF', speed:72, power:68, tackle:68, skill:80 },
+  { id:32, name:'Squad AM A', pos:'MF', speed:80, power:66, tackle:60, skill:84 },
+  { id:33, name:'Squad WM A', pos:'MF', speed:84, power:64, tackle:58, skill:78 },
+  { id:34, name:'Squad DM B', pos:'MF', speed:64, power:72, tackle:80, skill:76 },
+  { id:35, name:'Squad ST A', pos:'FW', speed:86, power:80, tackle:40, skill:80 },
+  { id:36, name:'Squad ST B', pos:'FW', speed:84, power:82, tackle:38, skill:78 },
+  { id:37, name:'Squad WF A', pos:'FW', speed:90, power:70, tackle:36, skill:82 },
+  { id:38, name:'Squad WF B', pos:'FW', speed:88, power:68, tackle:34, skill:80 },
+  { id:39, name:'Squad ST C', pos:'FW', speed:80, power:84, tackle:42, skill:76 },
+  { id:40, name:'Squad CM C', pos:'MF', speed:70, power:66, tackle:66, skill:74 },
 ];
 
 const canvas = document.getElementById('game');
@@ -403,6 +510,19 @@ const GameEvents = Object.freeze({
   TACTICAL_STATE_CHANGED: 'tacticalStateChanged',
   PRESS_TRIGGERED: 'pressTriggered',
   FORMATION_ADAPTED: 'formationAdapted',
+  // Phase 4, Step 20
+  SUBSTITUTION_REQUESTED: 'substitutionRequested',
+  SUBSTITUTION_CONFIRMED: 'substitutionConfirmed',
+  SUBSTITUTION_CANCELLED: 'substitutionCancelled',
+  PLAYER_SUBSTITUTED_ON: 'playerSubstitutedOn',
+  PLAYER_SUBSTITUTED_OFF: 'playerSubstitutedOff',
+  STAMINA_LOW: 'staminaLow',
+  PLAYER_EXHAUSTED: 'playerExhausted',
+  TACTICAL_PANEL_OPENED: 'tacticalPanelOpened',
+  TACTICAL_PANEL_CLOSED: 'tacticalPanelClosed',
+  IN_MATCH_TACTIC_CHANGED: 'inMatchTacticChanged',
+  AI_SUBSTITUTION: 'aiSubstitution',
+  PLAYER_ROLE_ADAPTED: 'playerRoleAdapted',
 });
 
 /* ---------- CONFIGURATION (Step 4) ----------
@@ -689,6 +809,41 @@ const TACTICS_CONFIG = {
 };
 const DEFAULT_SETTINGS_TACTICS = { formationId: DEFAULT_FORMATION_ID, mentality: DEFAULT_MENTALITY, style: DEFAULT_STYLE };
 
+/* ---------- SQUAD / SUBSTITUTION / STAMINA CONFIGURATION (Phase 4) ----------
+   Extends the existing config architecture (RULES_CONFIG, TACTICS_CONFIG)
+   rather than hard-coding numbers inline. */
+const SQUAD_CONFIG = {
+  maxSubstitutes: 7,       // Step 4: bench size per side (11v11); smaller sizes just get fewer if the pool runs out
+  maxSubstitutions: 5,     // Step 6: default sub limit per team, per match
+  subCooldownFrames: 1,    // minimum frames between two subs for the same team (prevents same-frame double-processing)
+};
+const STAMINA_CONFIG = {
+  max: 100,
+  // Step 8: drain scales with how hard a player is working this frame —
+  // measured from their own velocity (sprinting/dashing/chasing costs
+  // more than standing still), not a flat per-frame tax.
+  drainPerFrameAtFullSpeed: 0.028,
+  drainDashMultiplier: 1.6,
+  recoveryPerFrameIdle: 0.05,   // stationary / off the pitch
+  recoveryPerFrameWalking: 0.02,
+  thresholds: { HIGH: 65, MEDIUM: 40, LOW: 20 }, // >=HIGH: HIGH tier, >=MEDIUM: MEDIUM, >=LOW: LOW, else CRITICAL
+  speedFactorByTier: { HIGH: 1.0, MEDIUM: 0.92, LOW: 0.8, CRITICAL: 0.65 },
+  pressFactorByTier: { HIGH: 1.0, MEDIUM: 0.85, LOW: 0.6, CRITICAL: 0.35 },
+};
+const SCORELINE_CONFIG = {
+  enabled: true,
+  lateGameWindowSeconds: 900,     // "late" = within this many seconds of full time (large so it's reachable in short arcade matches too)
+  leadingLineShift: -0.05,        // Step 12: small, conservative nudges applied on top of the user's own mentality/style
+  trailingLineShift: 0.06,
+  trailingForwardBiasBoost: 0.08,
+};
+const AI_SUB_CONFIG = {
+  enabled: true,
+  checkIntervalSeconds: 45,       // Step 13: AI only reconsiders subs this often, never every frame
+  criticalStaminaThreshold: STAMINA_CONFIG.thresholds.LOW,
+  poorPerformanceMinMinutes: 20,  // don't judge performance on a tiny sample
+};
+
 /* ---------- GAME STATE MACHINE (Step 3) ----------
    Centralizes what used to be scattered booleans (state.running, screen
    hidden/shown flags). Invalid transitions (e.g. jumping straight to
@@ -837,7 +992,36 @@ function buildPlayerMatchStats() {
     goals: 0, assists: 0, shots: 0, shotsOnTarget: 0,
     passes: 0, completedPasses: 0, tackles: 0, foulsCommitted: 0,
     yellowCards: 0, redCards: 0, offsides: 0, saves: 0,
+    minutesPlayed: 0, // Phase 4, Step 15
   };
+}
+// Phase 4, Step 4/8: squad/condition status, separate from matchStats
+// (which is purely event-derived counters) since this is live state
+// that changes every frame rather than an incrementing counter.
+function buildSquadStatus(isStarter) {
+  return {
+    isStarter, isSubstitute: !isStarter, isOnPitch: isStarter,
+    stamina: STAMINA_CONFIG.max, subbedOutAtMinute: null, subbedInAtMinute: null,
+  };
+}
+// Step 8: transparent, config-driven stamina tier (never a hidden number).
+function staminaTier(stamina) {
+  const t = STAMINA_CONFIG.thresholds;
+  if (stamina >= t.HIGH) return 'HIGH';
+  if (stamina >= t.MEDIUM) return 'MEDIUM';
+  if (stamina >= t.LOW) return 'LOW';
+  return 'CRITICAL';
+}
+// Step 14: an explicit, derivable-from-existing-stats performance score
+// — not an invented hidden rating. Every term is a real matchStats
+// field; the weights are the only "made up" part, and they're right
+// here to see and tune.
+function playerPerformanceScore(p) {
+  const s = p.matchStats;
+  return Math.round(
+    s.goals * 10 + s.assists * 6 + s.completedPasses * 0.3 + s.tackles * 1.5 +
+    s.saves * 4 + s.shotsOnTarget * 1 - s.foulsCommitted * 2 - s.yellowCards * 3 - s.redCards * 8
+  );
 }
 function buildTeamModel(teamDef) {
   return {
@@ -1029,6 +1213,13 @@ let state = {
   tacticalPhase: { home: 'DEFENDING', away: 'ATTACKING', homeSince: 0, awaySince: 0 }, // Step 12
   markRecalcTimer: 0,
   pressEmitCooldowns: {}, // playerId -> last PRESS_TRIGGERED emit time(ms), avoids event spam
+  // ---- Phase 4: squad / substitutions / stamina ----
+  homeBench: [], awayBench: [],
+  substitutionsUsed: { home: 0, away: 0 },
+  pendingSubstitution: null, // queued sub request waiting out an active set piece (Step 5, 24)
+  aiSubCheckTimer: 0,
+  aiSubCooldowns: {}, // teamKey -> last AI sub time(ms)
+  tacticalPanelOpen: false,
 };
 
 /* ---------- INPUT SYSTEM (Step 10) ----------
@@ -1291,6 +1482,115 @@ setupTacticChips('formation-opts', 'formationId', GameEvents.FORMATION_CHANGED);
 setupTacticChips('mentality-opts', 'mentality', GameEvents.MENTALITY_CHANGED);
 setupTacticChips('style-opts', 'style', GameEvents.STYLE_CHANGED);
 
+/* ---------- IN-MATCH SQUAD/TACTICS PANEL (Phase 4, Steps 7, 11, 18) ----------
+   One compact panel, two tabs, reusing the existing .opt-chip / .panel
+   visual language. Positioned (see CSS) to never cover the joystick,
+   action buttons, canvas, or scoreboard. Available during active play
+   and at halftime — SubstitutionManager itself is what actually
+   enforces when a substitution may go through. */
+let mpSelectedOutgoingId = null;
+function openMatchPanel() {
+  state.tacticalPanelOpen = true;
+  document.getElementById('match-panel').classList.remove('hidden');
+  syncInMatchTacticsUI();
+  renderBenchPanel();
+  EventBus.emit(GameEvents.TACTICAL_PANEL_OPENED, {});
+}
+function closeMatchPanel() {
+  state.tacticalPanelOpen = false;
+  document.getElementById('match-panel').classList.add('hidden');
+  mpSelectedOutgoingId = null;
+  EventBus.emit(GameEvents.TACTICAL_PANEL_CLOSED, {});
+}
+document.getElementById('match-menu-toggle').onclick = () => {
+  if (document.getElementById('match-panel').classList.contains('hidden')) openMatchPanel();
+  else closeMatchPanel();
+};
+document.getElementById('match-panel-close').onclick = closeMatchPanel;
+document.getElementById('match-panel').querySelectorAll('.mp-tab').forEach(tab => {
+  tab.onclick = () => {
+    document.getElementById('match-panel').querySelectorAll('.mp-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const showBench = tab.dataset.tab === 'bench';
+    document.getElementById('mp-tactics').classList.toggle('hidden', showBench);
+    document.getElementById('mp-bench').classList.toggle('hidden', !showBench);
+    if (showBench) renderBenchPanel();
+  };
+});
+function syncInMatchTacticsUI() {
+  const sync = (id, val) => document.getElementById(id).querySelectorAll('.opt-chip').forEach(c => c.classList.toggle('selected', c.dataset.val === val));
+  sync('im-formation-opts', state.homeTactics.formationId);
+  sync('im-mentality-opts', state.homeTactics.mentality);
+  sync('im-style-opts', state.homeTactics.style);
+}
+function setupInMatchTacticChips(id, key, evt, label) {
+  document.getElementById(id).querySelectorAll('.opt-chip').forEach(chip => {
+    chip.onclick = () => {
+      document.getElementById(id).querySelectorAll('.opt-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      state.homeTactics[key] = chip.dataset.val;
+      SettingsManager.current.tactics = { ...state.homeTactics };
+      SettingsManager.persist();
+      if (key === 'formationId' && state.homePlayers.length) TacticalSystem.assignRoles(state.homePlayers, true); // Step 10, 18
+      EventBus.emit(evt, { home: true, [key]: chip.dataset.val });
+      if (state.running) { // Step 10/20: a genuine in-match change, not just the pre-kickoff default
+        EventBus.emit(GameEvents.IN_MATCH_TACTIC_CHANGED, { key, value: chip.dataset.val });
+        showRulesBanner(label.toUpperCase() + ' CHANGED', '#38bdf8', 1300);
+        showCommentary(`${label} change from the home bench.`, 1800);
+      }
+    };
+  });
+}
+setupInMatchTacticChips('im-formation-opts', 'formationId', GameEvents.FORMATION_CHANGED, 'Formation');
+setupInMatchTacticChips('im-mentality-opts', 'mentality', GameEvents.MENTALITY_CHANGED, 'Mentality');
+setupInMatchTacticChips('im-style-opts', 'style', GameEvents.STYLE_CHANGED, 'Style');
+
+function mpPlayerRow(p, isOutgoingCandidate) {
+  const tier = StaminaSystem.tier(p);
+  const tierColor = { HIGH: '#22c55e', MEDIUM: '#facc15', LOW: '#fb923c', CRITICAL: '#ef4444' }[tier];
+  const disabled = p.discipline.sentOff;
+  const selected = p.id === mpSelectedOutgoingId;
+  const row = document.createElement('div');
+  row.className = 'mp-row' + (selected ? ' selected' : '') + (disabled ? ' disabled' : '');
+  row.innerHTML = `<span class="mp-name">${p.name} <span style="color:#8b9bb4">(${p.role || p.pos})</span></span>
+    <div class="mp-stamina-bar"><div class="mp-stamina-fill" style="width:${Math.max(0, p.squadStatus.stamina)}%;background:${tierColor}"></div></div>`;
+  row.dataset.id = p.id;
+  return row;
+}
+function renderBenchPanel() {
+  const gate = SubstitutionManager.canSubstitute(true);
+  const used = state.substitutionsUsed.home, max = SQUAD_CONFIG.maxSubstitutions;
+  document.getElementById('mp-sub-count').textContent = `Substitutions used: ${used}/${max}` + (gate.ok ? '' : ` — unavailable (${gate.reason})`);
+  const onPitchEl = document.getElementById('mp-onpitch-list');
+  const benchEl = document.getElementById('mp-bench-list');
+  onPitchEl.innerHTML = ''; benchEl.innerHTML = '';
+  const outgoing = state.homePlayers.find(p => p.id === mpSelectedOutgoingId);
+  state.homePlayers.forEach(p => {
+    const row = mpPlayerRow(p);
+    if (!p.discipline.sentOff) row.onclick = () => { mpSelectedOutgoingId = (mpSelectedOutgoingId === p.id ? null : p.id); renderBenchPanel(); };
+    onPitchEl.appendChild(row);
+  });
+  state.homeBench.forEach(p => {
+    const row = mpPlayerRow(p);
+    const gkMismatch = outgoing && outgoing.isGK && p.pos !== 'GK';
+    if (p.discipline.sentOff || gkMismatch || !outgoing || !gate.ok) row.classList.add('disabled');
+    else row.onclick = () => {
+      const result = SubstitutionManager.request(true, outgoing.id, p.id);
+      mpSelectedOutgoingId = null;
+      renderBenchPanel();
+      if (!result.ok) showRulesBanner('SUB NOT ALLOWED', '#ef4444', 1400);
+    };
+    benchEl.appendChild(row);
+  });
+}
+// Keep the toggle button visible only while it's meaningful (matches
+// the existing #controls.active pattern used for the joystick/buttons).
+EventBus.on('stateChange', ({ to }) => {
+  document.getElementById('match-menu-toggle').classList.toggle('active', to === GameStates.PLAYING || to === GameStates.HALFTIME);
+  if (to !== GameStates.PLAYING && to !== GameStates.HALFTIME) closeMatchPanel();
+});
+EventBus.on(GameEvents.PLAYER_SUBSTITUTED_ON, () => { if (state.tacticalPanelOpen) renderBenchPanel(); });
+
 document.getElementById('btn-to-players').onclick = () => {
   AudioManager.ensure();
   if (!Game.state.transition(GameStates.SQUAD_SELECTION)) return;
@@ -1527,6 +1827,13 @@ function resolveHalfEnd() {
   else if (state.matchPeriod === MatchPeriods.SECOND_HALF) endMatch();
 }
 
+// Phase 4, Step 4: bench position is off-pitch (behind the team's own
+// goal, out of the playable area) — bench players are never in
+// state.home/awayPlayers, never touched by AI/collision/rendering
+// loops, and only enter play through SubstitutionManager.
+function benchSpot(isHome, index) {
+  return { x: isHome ? PITCH.margin - 30 : PITCH.w - PITCH.margin + 30, y: PITCH.margin + 20 + index * 24 };
+}
 function createTeams() {
   const size = state.teamSize;
   let homeData = state.selectedPlayerIds.map(id => ALL_PLAYERS.find(p => p.id === id));
@@ -1538,10 +1845,24 @@ function createTeams() {
   const awayData = [awayGK, ...awayPool.slice(0, size - 1)];
   const formH = formation(size, true);
   const formA = formation(size, false);
-  state.homePlayers = homeData.map((p, i) => makePlayer(p, state.homeTeam, formH[i], true));
-  state.awayPlayers = awayData.map((p, i) => makePlayer(p, state.awayTeam, formA[i], false));
+  state.homePlayers = homeData.map((p, i) => makePlayer(p, state.homeTeam, formH[i], true, true));
+  state.awayPlayers = awayData.map((p, i) => makePlayer(p, state.awayTeam, formA[i], false, true));
   TacticalSystem.assignRoles(state.homePlayers, true);
   TacticalSystem.assignRoles(state.awayPlayers, false);
+
+  // Benches: whatever's left in the shared pool, split fairly between
+  // both sides and capped by SQUAD_CONFIG.maxSubstitutes. With only 40
+  // total player entries, small formats (5v5) have plenty of spares;
+  // 11v11 leaves 18 to split 7/7 with a few unused — never fabricated,
+  // just whatever the pool actually has left.
+  const usedIds = new Set([...homeData, ...awayData].map(p => p.id));
+  const remaining = ALL_PLAYERS.filter(p => !usedIds.has(p.id));
+  const homeBenchData = remaining.slice(0, SQUAD_CONFIG.maxSubstitutes);
+  const awayBenchData = remaining.slice(SQUAD_CONFIG.maxSubstitutes, SQUAD_CONFIG.maxSubstitutes * 2);
+  state.homeBench = homeBenchData.map((p, i) => makePlayer(p, state.homeTeam, benchSpot(true, i), true, false));
+  state.awayBench = awayBenchData.map((p, i) => makePlayer(p, state.awayTeam, benchSpot(false, i), false, false));
+  state.substitutionsUsed = { home: 0, away: 0 };
+  state.aiSubCheckTimer = 0;
 }
 
 function formation(n, home) {
@@ -1571,7 +1892,7 @@ function formation(n, home) {
   return positions.slice(0, n);
 }
 
-function makePlayer(data, team, pos, isHome) {
+function makePlayer(data, team, pos, isHome, isStarter) {
   return {
     id: data.id + (isHome ? 0 : 200), name: data.name, pos: data.pos,
     speed: data.speed, power: data.power, tackle: data.tackle, skill: data.skill,
@@ -1583,6 +1904,7 @@ function makePlayer(data, team, pos, isHome) {
     discipline: buildDiscipline(),       // Phase 2, Step 6
     matchStats: buildPlayerMatchStats(), // Phase 2, Step 18
     role: null, tacticalAnchor: null,    // Phase 3: assigned by TacticalSystem.assignRoles() right after creation
+    squadStatus: buildSquadStatus(isStarter !== false), // Phase 4, Step 4
   };
 }
 
@@ -1675,8 +1997,14 @@ function loop(now) {
     state.lastTime = now;
     if (state.goalFlash > 0) state.goalFlash -= dt;
 
-    // ---- HALFTIME: engine fully paused, waiting on goToHalftime()'s timer ----
-    if (state.matchPeriod === MatchPeriods.HALFTIME) { draw(); requestAnimationFrame(loop); return; }
+    // ---- HALFTIME: engine fully paused, waiting on goToHalftime()'s timer.
+    // Substitutions ARE allowed at halftime (Step 5/23), so still process
+    // any request that came in through the bench UI while paused here. ----
+    if (state.matchPeriod === MatchPeriods.HALFTIME) {
+      SubstitutionManager.processPending();
+      StaminaSystem.recoverBench(dt);
+      draw(); requestAnimationFrame(loop); return;
+    }
 
     // ---- KICKOFF freeze: ball/players held, clock not yet running (Step 3) ----
     if (state.kickoffFreeze > 0) {
@@ -1712,7 +2040,11 @@ function loop(now) {
       return;
     }
 
+    SubstitutionManager.processPending(); // Step 24: apply any sub queued behind a just-finished set piece
     updatePossession(dt); // Step 19
+    updatePlayingMinutes(dt); // Step 15
+    StaminaSystem.recoverBench(dt); // Step 8
+    checkAISubstitutions(dt); // Step 13
     runIntegrityCheck(dt); // Step 23/30
     autoSwitchIfNeeded();
     updateControlled(dt);
@@ -1749,6 +2081,54 @@ function updatePossession(dt) {
   }
 }
 
+// Step 15: only on-pitch, not-sent-off players accumulate minutes, and
+// only while a half is actually being played (never at halftime/kickoff
+// freeze, matching the loop branches this is called from).
+function updatePlayingMinutes(dt) {
+  const minutes = (dt / 60) / 60;
+  for (const p of allPlayers()) {
+    if (p.squadStatus && p.squadStatus.isOnPitch && !p.discipline.sentOff) p.matchStats.minutesPlayed += minutes;
+  }
+}
+
+/* ---------- AI SUBSTITUTIONS (Phase 4, Step 13) ----------
+   AI only reconsiders subs on a real cooldown, and only for genuinely
+   meaningful reasons (never "slightly below 100"). Goes through the
+   exact same SubstitutionManager.request() a human bench UI would use —
+   no shortcut path. */
+function checkAISubstitutions(dt) {
+  if (!AI_SUB_CONFIG.enabled) return;
+  state.aiSubCheckTimer += dt / 60;
+  if (state.aiSubCheckTimer < AI_SUB_CONFIG.checkIntervalSeconds) return;
+  state.aiSubCheckTimer = 0;
+  considerAISubstitution(false); // away team is the AI-controlled side
+}
+function considerAISubstitution(isHome) {
+  const gate = SubstitutionManager.canSubstitute(isHome);
+  if (!gate.ok) return;
+  const bench = isHome ? state.homeBench : state.awayBench;
+  const available = bench.filter(p => !p.discipline.sentOff);
+  if (!available.length) return;
+  const onPitch = (isHome ? state.homePlayers : state.awayPlayers).filter(p => !p.discipline.sentOff);
+  // Priority 1 (Step 13): a critically exhausted outfield player.
+  let outgoing = onPitch.filter(p => !p.isGK && StaminaSystem.tier(p) === 'CRITICAL').sort((a, b) => a.squadStatus.stamina - b.squadStatus.stamina)[0];
+  let reason = 'stamina';
+  // Priority 2: poor performance + real fatigue (Step 14), only with a
+  // meaningful sample of minutes so a single early mistake isn't judged.
+  if (!outgoing) {
+    const candidates = onPitch.filter(p => !p.isGK && p.matchStats.minutesPlayed >= AI_SUB_CONFIG.poorPerformanceMinMinutes && StaminaSystem.tier(p) !== 'HIGH');
+    if (candidates.length) {
+      outgoing = candidates.reduce((worst, p) => playerPerformanceScore(p) < playerPerformanceScore(worst) ? p : worst);
+      reason = 'performance';
+    }
+  }
+  if (!outgoing) return;
+  // Prefer a like-for-like replacement (same role/position) where available.
+  const incoming = available.find(p => p.pos === outgoing.pos) || available[0];
+  const result = SubstitutionManager.request(isHome, outgoing.id, incoming.id);
+  if (result.ok) EventBus.emit(GameEvents.AI_SUBSTITUTION, { home: isHome, outgoingId: outgoing.id, incomingId: incoming.id, reason });
+}
+
 function sanitizeAllEntities() {
   if (!state.ball || !isFiniteNum(state.ball.x)) state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8 }; // Step 23: missing/corrupt ball
   sanitizeEntity(state.ball, PITCH.w / 2, PITCH.h / 2);
@@ -1779,6 +2159,23 @@ function runIntegrityCheck(dt) {
   // Phase 3, Step 20: tactical data validation.
   if (state.homePlayers.length) TacticalSystem.validate(state.homePlayers).forEach(msg => console.warn('[Integrity][tactics]', msg));
   if (state.awayPlayers.length) TacticalSystem.validate(state.awayPlayers).forEach(msg => console.warn('[Integrity][tactics]', msg));
+  // Phase 4, Step 27: squad/substitution/stamina validation.
+  for (const [label, onPitch, bench, size] of [['home', state.homePlayers, state.homeBench, state.teamSize], ['away', state.awayPlayers, state.awayBench, state.teamSize]]) {
+    const onPitchIds = new Set(onPitch.map(p => p.id));
+    for (const p of bench) {
+      if (onPitchIds.has(p.id)) console.warn(`[Integrity] ${label} player on pitch and bench simultaneously`, p.id);
+      if (p.squadStatus && (p.squadStatus.isOnPitch || p.squadStatus.isStarter)) console.warn(`[Integrity] ${label} bench player flagged as starter/on-pitch`, p.id);
+      if (p.discipline.sentOff && p.squadStatus && !p.squadStatus.isSubstitute) console.warn(`[Integrity] ${label} sent-off player not marked unavailable`, p.id);
+    }
+    for (const p of onPitch) {
+      if (!p.squadStatus) { console.warn(`[Integrity] ${label} on-pitch player missing squadStatus`, p.id); continue; }
+      if (!isFiniteNum(p.squadStatus.stamina) || p.squadStatus.stamina < 0 || p.squadStatus.stamina > STAMINA_CONFIG.max) console.warn(`[Integrity] ${label} invalid stamina`, p.id, p.squadStatus.stamina);
+      if (!isFiniteNum(p.matchStats.minutesPlayed) || p.matchStats.minutesPlayed < 0) console.warn(`[Integrity] ${label} invalid minutesPlayed`, p.id, p.matchStats.minutesPlayed);
+    }
+    if (onPitch.length > size) console.warn(`[Integrity] ${label} has more active players than the match size allows`, onPitch.length, size);
+    const used = state.substitutionsUsed[label];
+    if (used > SQUAD_CONFIG.maxSubstitutions) console.warn(`[Integrity] ${label} exceeded substitution limit`, used);
+  }
 }
 
 function updateControlled(dt) {
@@ -1787,7 +2184,7 @@ function updateControlled(dt) {
   const { dx, dy } = InputManager.moveVector();
   const dash = InputManager.isDash();
   const base = PLAYER_CONFIG.baseSpeedMin + (p.speed / 100) * PLAYER_CONFIG.speedScale;
-  const speed = dash ? base * PLAYER_CONFIG.dashMultiplier : base;
+  const speed = (dash ? base * PLAYER_CONFIG.dashMultiplier : base) * StaminaSystem.speedFactor(p); // Step 8
   if (Math.abs(dx) > PLAYER_CONFIG.moveThreshold || Math.abs(dy) > PLAYER_CONFIG.moveThreshold) {
     const len = Math.hypot(dx, dy) || 1;
     p.vx = (dx / len) * speed; p.vy = (dy / len) * speed;
@@ -1795,6 +2192,7 @@ function updateControlled(dt) {
   } else { p.vx *= PLAYER_CONFIG.decelFactor; p.vy *= PLAYER_CONFIG.decelFactor; }
   p.x += p.vx * dt; p.y += p.vy * dt;
   clampPlayer(p);
+  StaminaSystem.update(p, dt, dash);
   if (p.cooldown > 0) p.cooldown -= dt;
   if (InputManager.isShoot() && p.cooldown <= 0) doShoot(p, dash);
   if (InputManager.isPass() && p.cooldown <= 0) doPass(p, false);
@@ -2031,10 +2429,12 @@ function updateGK(p, dt, isHome) {
 function moveToward(p, tx, ty, spd, dt) {
   const dx = tx - p.x, dy = ty - p.y;
   const dist = Math.hypot(dx, dy) || 1;
-  p.vx = (dx / dist) * spd; p.vy = (dy / dist) * spd;
+  const effectiveSpd = spd * StaminaSystem.speedFactor(p); // Step 8: tired players are slower, never stopped
+  p.vx = (dx / dist) * effectiveSpd; p.vy = (dy / dist) * effectiveSpd;
   p.facing = Math.atan2(p.vy, p.vx);
   p.x += p.vx * dt; p.y += p.vy * dt;
   clampPlayer(p);
+  StaminaSystem.update(p, dt, false);
 }
 function clampPlayer(p) {
   p.x = Math.max(PITCH.margin + p.r, Math.min(PITCH.w - PITCH.margin - p.r, p.x));
@@ -2084,14 +2484,50 @@ function resolveCollisions() {
 }
 
 /* =====================================================================
-   TACTICAL SYSTEM (Phase 3)
-   The single tactical authority the existing AI consults — not a
-   parallel AI. It answers three questions for any player: "where
-   should you be right now" (role + formation + mentality + style +
-   ball position), "should you press or hold shape" (pressing), and
-   "who should you mark" (defensive zone marking). updateAI() calls
-   into this instead of duplicating tactical logic inline.
+   STAMINA SYSTEM (Phase 4, Step 8)
+   Drains from how hard a player is actually working this frame (their
+   own velocity relative to their top speed, boosted while dashing) and
+   recovers when idle, walking, or on the bench. Single integration
+   point: moveToward() (all AI/GK movement) and updateControlled()
+   (the human player) both call update() after setting velocity, so
+   every mover is covered without touching every call site individually.
    ===================================================================== */
+const StaminaSystem = {
+  _notified: {}, // playerId -> tier last notified, avoids repeat commentary every frame at the same tier
+  update(p, dt, isDashing) {
+    if (!p.squadStatus) return;
+    const speedNow = Math.hypot(p.vx, p.vy);
+    const topSpeed = PLAYER_CONFIG.baseSpeedMin + (p.speed / 100) * PLAYER_CONFIG.speedScale * PLAYER_CONFIG.dashMultiplier;
+    const intensity = topSpeed > 0 ? Math.min(1, speedNow / topSpeed) : 0;
+    if (intensity > 0.15) {
+      const drain = STAMINA_CONFIG.drainPerFrameAtFullSpeed * intensity * (isDashing ? STAMINA_CONFIG.drainDashMultiplier : 1);
+      p.squadStatus.stamina = Math.max(0, p.squadStatus.stamina - drain * dt);
+    } else {
+      const recover = intensity > 0.02 ? STAMINA_CONFIG.recoveryPerFrameWalking : STAMINA_CONFIG.recoveryPerFrameIdle;
+      p.squadStatus.stamina = Math.min(STAMINA_CONFIG.max, p.squadStatus.stamina + recover * dt);
+    }
+    const tier = this.tier(p);
+    if (tier !== this._notified[p.id] && (tier === 'LOW' || tier === 'CRITICAL')) {
+      this._notified[p.id] = tier;
+      const evt = tier === 'CRITICAL' ? GameEvents.PLAYER_EXHAUSTED : GameEvents.STAMINA_LOW;
+      EventBus.emit(evt, { home: p.isHome, playerId: p.id, tier });
+      if (tier === 'CRITICAL') showCommentary(`${p.name} is showing real signs of fatigue.`, 1800);
+    } else if (tier === 'HIGH') {
+      this._notified[p.id] = tier;
+    }
+  },
+  // Step 8: bench players recover passively — called once/frame from the
+  // main loop for both benches (cheap: just the bench arrays, not a full
+  // squad scan).
+  recoverBench(dt) {
+    for (const p of state.homeBench) if (p.squadStatus) p.squadStatus.stamina = Math.min(STAMINA_CONFIG.max, p.squadStatus.stamina + STAMINA_CONFIG.recoveryPerFrameIdle * dt);
+    for (const p of state.awayBench) if (p.squadStatus) p.squadStatus.stamina = Math.min(STAMINA_CONFIG.max, p.squadStatus.stamina + STAMINA_CONFIG.recoveryPerFrameIdle * dt);
+  },
+  tier(p) { return staminaTier(p.squadStatus ? p.squadStatus.stamina : STAMINA_CONFIG.max); },
+  speedFactor(p) { return STAMINA_CONFIG.speedFactorByTier[this.tier(p)]; },
+  pressFactor(p) { return STAMINA_CONFIG.pressFactorByTier[this.tier(p)]; },
+};
+
 const TacticalSystem = {
   /* Step 3, 5, 6: current tactics for a side. Home is user-editable via
      the UI; away is a fixed AI-only profile so the opponent still plays
@@ -2144,44 +2580,55 @@ const TacticalSystem = {
     }
   },
 
+  /* Step 12: small, conservative scoreline-aware nudge on top of the
+     user's own chosen mentality — never a category of its own, and
+     bounded so it can't override what the player selected. Returns a
+     defensiveLineShift delta and a forwardBias delta. */
+  scorelineAdjustment(isHome) {
+    if (!SCORELINE_CONFIG.enabled || !state.match) return { line: 0, forward: 0 };
+    const timeLeft = state.matchPeriod === MatchPeriods.SECOND_HALF ? state.timeLeft : state.halfDuration + state.timeLeft;
+    if (timeLeft > SCORELINE_CONFIG.lateGameWindowSeconds) return { line: 0, forward: 0 };
+    const margin = isHome ? state.scoreHome - state.scoreAway : state.scoreAway - state.scoreHome;
+    if (margin > 0) return { line: SCORELINE_CONFIG.leadingLineShift, forward: 0 };
+    if (margin < 0) return { line: SCORELINE_CONFIG.trailingLineShift, forward: SCORELINE_CONFIG.trailingForwardBiasBoost };
+    return { line: 0, forward: 0 };
+  },
+
   /* Step 7: tactical target position for an 11-a-side player with a
      formation anchor. Mirrors the normalized slot for home (attacks +x)
      vs away (attacks -x), applies the mentality's line shift and the
      style's block depth, then pulls toward the ball by the role's
      support factor — the same idea as Phase 2's formationPullX/Y, now
-     role/mentality/style-aware instead of one fixed constant. */
+     role/mentality/style-aware instead of one fixed constant. A tired
+     player (Step 9) sits a touch deeper. */
   anchorTarget(p, ball) {
     if (!p.tacticalAnchor) return null;
     const mentality = this.getMentality(p.isHome), style = this.getStyle(p.isHome), role = ROLE_DEFS[p.role] || ROLE_DEFS.CM;
+    const scoreline = this.scorelineAdjustment(p.isHome); // Step 12
     const playW = PITCH.w - 2 * PITCH.margin, playH = PITCH.h - 2 * PITCH.margin;
     let nx = p.tacticalAnchor.x, ny = p.tacticalAnchor.y;
-    // Depth: shift up-field with mentality, compress/expand with style block depth.
-    nx = 0.5 + (nx - 0.5) * style.blockDepth + mentality.defensiveLineShift * (role.band === 'gk' ? 0 : 1);
+    const staminaLineFactor = role.band === 'gk' ? 0 : (1 - StaminaSystem.speedFactor(p)) * -0.06;
+    nx = 0.5 + (nx - 0.5) * style.blockDepth + (mentality.defensiveLineShift + scoreline.line) * (role.band === 'gk' ? 0 : 1) + staminaLineFactor;
     nx = Math.max(0.03, Math.min(0.97, nx));
     const px = p.isHome ? PITCH.margin + nx * playW : PITCH.w - PITCH.margin - nx * playW;
     const py = PITCH.margin + ny * playH;
-    // Ball-relative pull: how much this role drifts toward the ball's
-    // side of the pitch, scaled by support + mentality's support distance.
-    const pull = role.support * mentality.supportDistance * 0.16;
+    const pull = role.support * mentality.supportDistance * 0.16 * (1 + scoreline.forward);
     const bx = px + (ball.x - PITCH.w / 2) * pull * (p.isHome ? 1 : -1) * -1 + (ball.x - PITCH.w / 2) * pull;
     const by = py + (ball.y - PITCH.h / 2) * pull * 0.5;
     return { tx: bx, ty: by };
   },
 
-  /* Step 10: how far this role/mentality/style combo presses. A CB in a
-     LOW_BLOCK/DEFENSIVE setup barely presses; a CM in PRESSING/ATTACKING
-     presses hard. Multiplies the existing AI_CONFIG engage distances
-     rather than replacing them. */
+  /* Step 10: how far this role/mentality/style combo presses. Tired
+     players (Step 9) press noticeably less via StaminaSystem.pressFactor. */
   pressingRadius(p, baseEngageDist) {
     const role = ROLE_DEFS[p.role] || ROLE_DEFS.CM;
     const mentality = this.getMentality(p.isHome), style = this.getStyle(p.isHome);
-    const factor = 0.55 + role.pressing * mentality.pressIntensity * style.pressIntensity * 0.75;
-    return baseEngageDist * Math.max(0.4, Math.min(2.2, factor));
+    const factor = (0.55 + role.pressing * mentality.pressIntensity * style.pressIntensity * 0.75) * StaminaSystem.pressFactor(p);
+    return baseEngageDist * Math.max(0.25, Math.min(2.2, factor));
   },
 
   /* Step 10: only a capped number of eligible players actually press the
-     ball at once (closest first); everyone else holds tactical shape.
-     Prevents the whole team swarming the ball. */
+     ball at once (closest first); everyone else holds tactical shape. */
   selectPressers(teamPlayers, ball, baseEngageDist, maxPressers) {
     const eligible = teamPlayers
       .filter(p => !p.isGK)
@@ -2201,17 +2648,13 @@ const TacticalSystem = {
     return pressingIds;
   },
 
-  /* Step 11: zone-aware marking — prioritizes a dangerous nearby
-     attacker in the defender's own zone over blindly chasing the ball.
-     Recalculated on a timer (state.markRecalcTimer), not every frame. */
+  /* Step 11: zone-aware marking. */
   pickMarkTarget(defender, opponents) {
     let best = null, bestScore = -Infinity;
     for (const o of opponents) {
       if (o.discipline.sentOff) continue;
       const d = Math.hypot(o.x - defender.x, o.y - defender.y);
       if (d > TACTICS_CONFIG.maxMarkingRange) continue;
-      // Dangerous = advanced up the pitch toward this defender's goal
-      // (from the defender's own attacking-direction perspective).
       const danger = defender.isHome ? o.x : (PITCH.w - o.x);
       const score = danger - d * 0.6;
       if (score > bestScore) { bestScore = score; best = o; }
@@ -2219,12 +2662,9 @@ const TacticalSystem = {
     return best;
   },
 
-  /* Step 12: possession-change transitions. Reads the Phase 2 possession
-     tracker (already computed once per frame elsewhere) instead of
-     recomputing ball-owner state — cheap, and only emits an event on an
-     actual phase change, never every frame. */
+  /* Step 12: possession-change transitions. */
   updateTransitions(dt) {
-    const nowTeam = state.possession.team; // true=home has it, false=away, null=loose
+    const nowTeam = state.possession.team;
     if (nowTeam !== this._lastPossessionTeam) {
       this._lastPossessionTeam = nowTeam;
       const t = state.match ? state.match.matchTime : 0;
@@ -2246,11 +2686,8 @@ const TacticalSystem = {
   },
   _lastPossessionTeam: undefined,
 
-  /* Step 9: style-aware pass-target scoring, layered on TOP of the
-     existing nearestTeammate() geometry (never replacing it) — and only
-     ever used for AI-initiated passes. Human passing (doPass called from
-     updateControlled) never passes a style, so player controls are
-     unchanged (Step 9 explicit requirement). */
+  /* Step 9: style-aware pass-target scoring, layered on top of
+     nearestTeammate() — only ever used for AI-initiated passes. */
   scorePassCandidate(passer, candidate, baseScore) {
     const style = this.getStyle(passer.isHome);
     const forwardness = passer.isHome ? (candidate.x - passer.x) : (passer.x - candidate.x);
@@ -2287,6 +2724,101 @@ EventBus.on(GameEvents.RED_CARD, ({ home }) => {
 });
 
 /* =====================================================================
+   SUBSTITUTION MANAGER (Phase 4, Steps 5-7, 17-19, 24)
+   The single authority for moving a player between the pitch and the
+   bench. Both the human bench UI and AI substitution logic go through
+   request() — there is no separate AI shortcut path (Step 13).
+   ===================================================================== */
+const SubstitutionManager = {
+  /* Step 5-6: can this side make a substitution right now at all
+     (independent of which two players are chosen)? */
+  canSubstitute(isHome) {
+    if (!state.match || !state.running) return { ok: false, reason: 'no active match' };
+    if (!Game.state.is(GameStates.PLAYING, GameStates.HALFTIME)) return { ok: false, reason: 'match not in a substitutable state' };
+    if (state.matchPeriod === MatchPeriods.PRE_MATCH || state.matchPeriod === MatchPeriods.FULL_TIME) return { ok: false, reason: 'invalid match period' };
+    const used = isHome ? state.substitutionsUsed.home : state.substitutionsUsed.away;
+    if (used >= SQUAD_CONFIG.maxSubstitutions) return { ok: false, reason: 'substitution limit reached' };
+    return { ok: true };
+  },
+  /* Step 5: entry point for both human (bench UI) and AI callers.
+     Queues instead of executing if a set piece is currently active
+     (Step 24) — never mutates mid-restart. */
+  request(isHome, outgoingId, incomingId) {
+    const gate = this.canSubstitute(isHome);
+    if (!gate.ok) return gate;
+    const onPitch = isHome ? state.homePlayers : state.awayPlayers;
+    const bench = isHome ? state.homeBench : state.awayBench;
+    const outgoing = onPitch.find(p => p.id === outgoingId);
+    const incoming = bench.find(p => p.id === incomingId);
+    if (!outgoing) return { ok: false, reason: 'outgoing player not on this pitch' };
+    if (outgoing.discipline.sentOff) return { ok: false, reason: 'a sent-off player cannot be substituted' }; // Step 17
+    if (!incoming) return { ok: false, reason: 'incoming player not available on the bench' };
+    if (incoming.discipline.sentOff) return { ok: false, reason: 'a sent-off player cannot enter as a substitute' }; // Step 17
+    if (outgoing.isGK && incoming.pos !== 'GK') return { ok: false, reason: 'a goalkeeper can only be replaced by another goalkeeper' }; // Step 19
+    EventBus.emit(GameEvents.SUBSTITUTION_REQUESTED, { home: isHome, outgoingId, incomingId });
+    if (state.setPiece && state.setPiece.active) {
+      state.pendingSubstitution = { isHome, outgoingId, incomingId };
+      return { ok: true, queued: true };
+    }
+    return this.execute(isHome, outgoingId, incomingId);
+  },
+  execute(isHome, outgoingId, incomingId) {
+    const onPitch = isHome ? state.homePlayers : state.awayPlayers;
+    const bench = isHome ? state.homeBench : state.awayBench;
+    const idx = onPitch.findIndex(p => p.id === outgoingId);
+    const bIdx = bench.findIndex(p => p.id === incomingId);
+    if (idx === -1 || bIdx === -1) return { ok: false, reason: 'player no longer available' };
+    const outgoing = onPitch[idx], incoming = bench[bIdx];
+
+    // Swap in place — same array index — so every existing index-based
+    // lookup (formation(), etc.) keeps working untouched (Step 3).
+    incoming.x = outgoing.x; incoming.y = outgoing.y; incoming.vx = 0; incoming.vy = 0;
+    incoming.facing = outgoing.facing; incoming.cooldown = 0; incoming.stunned = 0;
+    incoming.squadStatus.isOnPitch = true; incoming.squadStatus.isSubstitute = false;
+    incoming.squadStatus.subbedInAtMinute = state.match.matchTime / 60;
+    outgoing.squadStatus.isOnPitch = false; outgoing.squadStatus.isSubstitute = true;
+    outgoing.squadStatus.subbedOutAtMinute = state.match.matchTime / 60;
+    const spot = benchSpot(isHome, bIdx);
+    outgoing.x = spot.x; outgoing.y = spot.y; outgoing.vx = 0; outgoing.vy = 0;
+
+    onPitch[idx] = incoming;
+    bench[bIdx] = outgoing;
+
+    if (state.controlledId === outgoing.id) { // Step 3/7: hand control to the incoming player
+      state.controlledId = incoming.id;
+      if (state.match) state.match.selectedPlayer = incoming.id;
+    }
+
+    TacticalSystem.assignRoles(onPitch, isHome); // Step 7, 18: recalculate roles/anchors for the new XI
+
+    state.substitutionsUsed[isHome ? 'home' : 'away']++;
+    if (state.match) {
+      state.match.homeTeam.players = state.homePlayers.map(p => p.profile);
+      state.match.awayTeam.players = state.awayPlayers.map(p => p.profile);
+    }
+
+    EventBus.emit(GameEvents.PLAYER_SUBSTITUTED_OFF, { home: isHome, playerId: outgoing.id });
+    EventBus.emit(GameEvents.PLAYER_SUBSTITUTED_ON, { home: isHome, playerId: incoming.id });
+    EventBus.emit(GameEvents.SUBSTITUTION_CONFIRMED, { home: isHome, outgoingId: outgoing.id, incomingId: incoming.id });
+    AudioManager.setPieceWhistle();
+    showRulesBanner('SUBSTITUTION', '#38bdf8', 1600);
+    showCommentary(`Substitution: ${incoming.name} replaces ${outgoing.name}.`, 2200);
+    return { ok: true };
+  },
+  /* Step 24: called once/frame — if a sub was queued behind an active
+     set piece, apply it the instant the pitch is clear again. */
+  processPending() {
+    if (!state.pendingSubstitution) return;
+    if (state.setPiece && state.setPiece.active) return;
+    const req = state.pendingSubstitution;
+    state.pendingSubstitution = null;
+    const gate = this.canSubstitute(req.isHome);
+    if (!gate.ok) { EventBus.emit(GameEvents.SUBSTITUTION_CANCELLED, { home: req.isHome, reason: gate.reason }); return; }
+    this.execute(req.isHome, req.outgoingId, req.incomingId);
+  },
+};
+
+/* =====================================================================
    REFEREE SYSTEM (Phase 2, Steps 4-9, 14-16)
    Central rules authority. Every foul/card/offside/advantage decision
    in the match goes through here, driven only by real gameplay state
@@ -2301,7 +2833,6 @@ const RefereeSystem = {
     const cfg = RULES_CONFIG.fouls;
     if (!cfg.enabled) return false;
     if (Math.random() >= cfg.tackleFoulChance) return false; // most tackles play out exactly as Phase 1
-    // Lower tackling ability -> more likely to mistime the challenge.
     const severity = Math.min(1, Math.max(0, (1 - tackler.tackle / 100) * 0.6 + Math.random() * 0.5));
     const fromBehind = Math.cos(tackler.facing - Math.atan2(tackler.y - victim.y, tackler.x - victim.x)) < -0.2;
     const type = severity > cfg.recklessThreshold ? 'reckless_tackle' : (fromBehind ? 'foul_from_behind' : 'late_tackle');
@@ -2321,7 +2852,6 @@ const RefereeSystem = {
     if (now - (state.collisionFoulCooldowns[key] || 0) < cfg.collisionCooldownMs) return;
     if (Math.random() >= cfg.collisionFoulChance) return;
     state.collisionFoulCooldowns[key] = now;
-    // Whoever was moving faster into the challenge is the offender.
     const [tackler, victim] = Math.hypot(a.vx, a.vy) >= Math.hypot(c.vx, c.vy) ? [a, c] : [c, a];
     const severity = Math.min(1, 0.35 + (relSpeed - cfg.collisionThreshold) / 12);
     this._whistle(tackler, victim, 'collision_foul', severity);
@@ -2336,8 +2866,6 @@ const RefereeSystem = {
     };
     offender.cooldown = Math.max(offender.cooldown, PLAYER_CONFIG.tackleCooldown);
     EventBus.emit(GameEvents.FOUL, { ...foul, home: offender.isHome });
-    // Step 15: advantage — if the fouled side still has a clear, quick
-    // attack on, let play run instead of stopping it immediately.
     if (this.applyAdvantage(victim)) {
       showRulesBanner('ADVANTAGE', '#facc15', 1100);
       AudioManager.foulWhistle();
@@ -2353,7 +2881,7 @@ const RefereeSystem = {
     this._startRestartFromFoul(offender, foul);
   },
   _startRestartFromFoul(offender, foul) {
-    const defendingIsHome = offender.isHome; // offender's team is defending against the restart
+    const defendingIsHome = offender.isHome;
     const box = penaltyBoxFor(defendingIsHome);
     const inBox = foul.location.x >= box.x0 && foul.location.x <= box.x1
       && foul.location.y >= box.y0 && foul.location.y <= box.y1;
@@ -2366,7 +2894,7 @@ const RefereeSystem = {
     if (kind === 'yellow') {
       player.discipline.yellowCards++;
       if (player.discipline.yellowCards >= RULES_CONFIG.cards.yellowToRed) {
-        this.issueCard(player, 'red', foulRef); // second yellow -> red
+        this.issueCard(player, 'red', foulRef);
         return;
       }
       AudioManager.card(false);
@@ -2379,13 +2907,11 @@ const RefereeSystem = {
       AudioManager.card(true);
       showRulesBanner('RED CARD', '#ef4444', 2000);
       showCommentary(randomLine('red'), 2400);
-      if (state.controlledId === player.id) getControlled(); // Step 7: hand control to a teammate immediately
+      if (state.controlledId === player.id) getControlled();
       EventBus.emit(GameEvents.RED_CARD, { home: player.isHome, playerId: player.id });
     }
   },
-  /* Step 15: simple advantage — the fouled team keeps it if, right now,
-     the ball is moving briskly toward the opponents' goal and a
-     teammate of the victim is closer to it than any opponent. */
+  /* Step 15: simple advantage. */
   applyAdvantage(victim) {
     if (!RULES_CONFIG.advantage.enabled) return false;
     const b = state.ball;
@@ -2400,16 +2926,12 @@ const RefereeSystem = {
     }, Infinity);
     return closest(mine) < closest(theirs);
   },
-  /* Step 14: offside check, run at the moment of a forward through pass.
-     Only ever called for that specific pass/receiver pair — a player
-     merely standing upfield never triggers this on its own. */
+  /* Step 14: offside check, run at the moment of a forward through pass. */
   evaluateOffside(passer, receiver, ball) {
     if (!RULES_CONFIG.offside.enabled || !receiver) return false;
     const defenders = (passer.isHome ? state.awayPlayers : state.homePlayers)
       .filter(p => !p.isGK && !p.discipline.sentOff);
-    if (defenders.length < 2) return false; // need at least a "second-last" defender to exist
-    // For a home attack the defensive line is measured by away players'
-    // x (higher x = deeper, closer to their own goal); mirrored for away.
+    if (defenders.length < 2) return false;
     const sorted = defenders.slice().sort((a, b2) => passer.isHome ? b2.x - a.x : a.x - b2.x);
     const secondLastX = sorted[1].x;
     const buf = RULES_CONFIG.offside.offsideBuffer;
@@ -2423,9 +2945,7 @@ const RefereeSystem = {
     SetPieceManager.start('FREE_KICK', { teamId: (receiver.isHome ? state.awayTeam : state.homeTeam).id, teamIsHome: !receiver.isHome, location: { x: receiver.x, y: receiver.y } });
     return true;
   },
-  /* Step 11-13: out-of-bounds classification, called once per frame
-     from the game loop after checkGoals (so an actual goal always wins
-     over an out-of-bounds read on the same frame). */
+  /* Step 11-13: out-of-bounds classification. */
   evaluateBoundary() {
     const b = state.ball;
     const gTop = PITCH.h / 2 - GOAL_W / 2, gBot = PITCH.h / 2 + GOAL_W / 2;
@@ -2438,14 +2958,12 @@ const RefereeSystem = {
       return true;
     }
     if (b.x < PITCH.margin && !(b.y > gTop && b.y < gBot)) {
-      // Home defends this (left) goal line.
-      const defenderTouchedLast = touch ? touch.isHome : true; // unknown toucher defaults to goal kick, the more common case
+      const defenderTouchedLast = touch ? touch.isHome : true;
       if (defenderTouchedLast) SetPieceManager.start('CORNER', { teamId: state.awayTeam.id, teamIsHome: false, location: { x: PITCH.margin + RULES_CONFIG.boundaries.cornerInset, y: b.y < PITCH.h / 2 ? PITCH.margin + RULES_CONFIG.boundaries.cornerInset : PITCH.h - PITCH.margin - RULES_CONFIG.boundaries.cornerInset } });
       else SetPieceManager.start('GOAL_KICK', { teamId: state.homeTeam.id, teamIsHome: true, location: { x: PITCH.margin + RULES_CONFIG.boundaries.goalKickInset, y: PITCH.h / 2 } });
       return true;
     }
     if (b.x > PITCH.w - PITCH.margin && !(b.y > gTop && b.y < gBot)) {
-      // Away defends this (right) goal line.
       const defenderTouchedLast = touch ? !touch.isHome : true;
       if (defenderTouchedLast) SetPieceManager.start('CORNER', { teamId: state.homeTeam.id, teamIsHome: true, location: { x: PITCH.w - PITCH.margin - RULES_CONFIG.boundaries.cornerInset, y: b.y < PITCH.h / 2 ? PITCH.margin + RULES_CONFIG.boundaries.cornerInset : PITCH.h - PITCH.margin - RULES_CONFIG.boundaries.cornerInset } });
       else SetPieceManager.start('GOAL_KICK', { teamId: state.awayTeam.id, teamIsHome: false, location: { x: PITCH.w - PITCH.margin - RULES_CONFIG.boundaries.goalKickInset, y: PITCH.h / 2 } });
@@ -2463,11 +2981,6 @@ function penaltyBoxFor(isHome) {
 
 /* =====================================================================
    SET-PIECE MANAGER (Phase 2, Steps 8-13, 24)
-   One reusable controller for every restart type instead of separate
-   hardcoded positioning code per set piece. While active it freezes
-   normal AI/input movement (see loop()); positions ball + players;
-   and auto-executes the restart after a short delay using the
-   existing doPass/doShoot mechanics — no separate shooting engine.
    ===================================================================== */
 const SetPieceManager = {
   start(type, opts) {
@@ -2499,7 +3012,6 @@ const SetPieceManager = {
     const teamPlayers = (s.teamIsHome ? state.homePlayers : state.awayPlayers).filter(p => !p.discipline.sentOff && !p.isGK);
     if (!teamPlayers.length) { s.takerId = null; return; }
     if (s.type === 'PENALTY') {
-      // Best available shooter (highest power) takes the penalty.
       s.takerId = teamPlayers.reduce((a, b2) => (b2.power > a.power ? b2 : a)).id;
     } else {
       let best = teamPlayers[0], bestD = Infinity;
@@ -2514,7 +3026,7 @@ const SetPieceManager = {
       const defendingGK = (s.teamIsHome ? state.awayPlayers : state.homePlayers).find(p => p.isGK && !p.discipline.sentOff);
       if (defendingGK) { defendingGK.x = s.teamIsHome ? PITCH.margin + 30 : PITCH.w - PITCH.margin - 30; defendingGK.y = PITCH.h / 2; defendingGK.vx = 0; defendingGK.vy = 0; }
     }
-    const radius = s.type === 'PENALTY' ? 999 : RULES_CONFIG.setPieces.repositionRadius; // penalty: everyone but taker/GK clears the box already
+    const radius = s.type === 'PENALTY' ? 999 : RULES_CONFIG.setPieces.repositionRadius;
     for (const p of activePlayers()) {
       if (taker && p.id === taker.id) continue;
       if (p.isGK) continue;
@@ -2527,14 +3039,10 @@ const SetPieceManager = {
       p.vx = 0; p.vy = 0;
     }
   },
-  /* Called every frame the set piece is active (from the game loop). */
   update(dt) {
     const s = state.setPiece;
     if (!s || !s.active) return;
     s.timer -= dt;
-    // A human-controlled taker can shoot/pass early via the normal
-    // input mapping (still compatible with the existing systems);
-    // otherwise the restart auto-executes once the freeze elapses.
     const taker = findPlayerById(s.takerId);
     const humanTaking = taker && taker.id === state.controlledId && !taker.isGK;
     if (humanTaking && s.type !== 'THROW_IN') {
@@ -2558,10 +3066,7 @@ const SetPieceManager = {
   },
 };
 
-/* ---------- OUT-OF-BOUNDS ENGINE ENTRY POINT (Phase 2, Step 13) ----------
-   Ball -> here -> RefereeSystem.evaluateBoundary -> SetPieceManager.
-   Called once per frame from the game loop, only when no goal was
-   scored this frame and no set piece is already in progress. */
+/* ---------- OUT-OF-BOUNDS ENGINE ENTRY POINT (Phase 2, Step 13) ---------- */
 function checkBoundaries() {
   if (state.setPiece && state.setPiece.active) return;
   RefereeSystem.evaluateBoundary();
