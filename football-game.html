@@ -2164,7 +2164,7 @@ function runIntegrityCheck(dt) {
     const onPitchIds = new Set(onPitch.map(p => p.id));
     for (const p of bench) {
       if (onPitchIds.has(p.id)) console.warn(`[Integrity] ${label} player on pitch and bench simultaneously`, p.id);
-      if (p.squadStatus && (p.squadStatus.isOnPitch || p.squadStatus.isStarter)) console.warn(`[Integrity] ${label} bench player flagged as starter/on-pitch`, p.id);
+      if (p.squadStatus && (p.squadStatus.isOnPitch || (p.squadStatus.isStarter && p.squadStatus.subbedOutAtMinute === null))) console.warn(`[Integrity] ${label} bench player flagged as starter/on-pitch`, p.id);
       if (p.discipline.sentOff && p.squadStatus && !p.squadStatus.isSubstitute) console.warn(`[Integrity] ${label} sent-off player not marked unavailable`, p.id);
     }
     for (const p of onPitch) {
@@ -2496,6 +2496,8 @@ const StaminaSystem = {
   _notified: {}, // playerId -> tier last notified, avoids repeat commentary every frame at the same tier
   update(p, dt, isDashing) {
     if (!p.squadStatus) return;
+    if (!isFiniteNum(p.squadStatus.stamina)) p.squadStatus.stamina = STAMINA_CONFIG.max; // NaN/Infinity/undefined guard
+    p.squadStatus.stamina = Math.max(0, Math.min(STAMINA_CONFIG.max, p.squadStatus.stamina));
     const speedNow = Math.hypot(p.vx, p.vy);
     const topSpeed = PLAYER_CONFIG.baseSpeedMin + (p.speed / 100) * PLAYER_CONFIG.speedScale * PLAYER_CONFIG.dashMultiplier;
     const intensity = topSpeed > 0 ? Math.min(1, speedNow / topSpeed) : 0;
@@ -2520,6 +2522,7 @@ const StaminaSystem = {
   // main loop for both benches (cheap: just the bench arrays, not a full
   // squad scan).
   recoverBench(dt) {
+    for (const p of [...state.homeBench, ...state.awayBench]) if (p.squadStatus) p.squadStatus.stamina = isFiniteNum(p.squadStatus.stamina) ? Math.max(0, Math.min(STAMINA_CONFIG.max, p.squadStatus.stamina)) : STAMINA_CONFIG.max; // NaN/Infinity/range guard
     for (const p of state.homeBench) if (p.squadStatus) p.squadStatus.stamina = Math.min(STAMINA_CONFIG.max, p.squadStatus.stamina + STAMINA_CONFIG.recoveryPerFrameIdle * dt);
     for (const p of state.awayBench) if (p.squadStatus) p.squadStatus.stamina = Math.min(STAMINA_CONFIG.max, p.squadStatus.stamina + STAMINA_CONFIG.recoveryPerFrameIdle * dt);
   },
@@ -2769,6 +2772,10 @@ const SubstitutionManager = {
     const bIdx = bench.findIndex(p => p.id === incomingId);
     if (idx === -1 || bIdx === -1) return { ok: false, reason: 'player no longer available' };
     const outgoing = onPitch[idx], incoming = bench[bIdx];
+    // Re-validate at execution time: a queued request can go stale (e.g. a player sent off while it waited).
+    if (outgoing.discipline.sentOff) return { ok: false, reason: 'a sent-off player cannot be substituted' };
+    if (incoming.discipline.sentOff) return { ok: false, reason: 'a sent-off player cannot enter as a substitute' };
+    if (outgoing.isGK && !incoming.isGK) return { ok: false, reason: 'a goalkeeper can only be replaced by another goalkeeper' };
 
     // Swap in place — same array index — so every existing index-based
     // lookup (formation(), etc.) keeps working untouched (Step 3).
@@ -2814,7 +2821,8 @@ const SubstitutionManager = {
     state.pendingSubstitution = null;
     const gate = this.canSubstitute(req.isHome);
     if (!gate.ok) { EventBus.emit(GameEvents.SUBSTITUTION_CANCELLED, { home: req.isHome, reason: gate.reason }); return; }
-    this.execute(req.isHome, req.outgoingId, req.incomingId);
+    const res = this.execute(req.isHome, req.outgoingId, req.incomingId);
+    if (!res.ok) EventBus.emit(GameEvents.SUBSTITUTION_CANCELLED, { home: req.isHome, reason: res.reason });
   },
 };
 
