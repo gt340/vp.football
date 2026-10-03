@@ -523,6 +523,19 @@ const GameEvents = Object.freeze({
   IN_MATCH_TACTIC_CHANGED: 'inMatchTacticChanged',
   AI_SUBSTITUTION: 'aiSubstitution',
   PLAYER_ROLE_ADAPTED: 'playerRoleAdapted',
+  // Phase 5, Step 13: player control / ball control / switching events.
+  // Additive only -- existing SHOT/PASS/TACKLE events are unchanged and
+  // still fire exactly as before; these are extra, more granular signals
+  // layered on top for the new control/possession systems below.
+  PLAYER_CONTROL_CHANGED: 'playerControlChanged',
+  BALL_CONTROL_GAINED: 'ballControlGained',
+  BALL_CONTROL_LOST: 'ballControlLost',
+  PASS_ATTEMPTED: 'passAttempted',
+  PASS_COMPLETED: 'passCompleted',
+  SHOT_ATTEMPTED: 'shotAttempted',
+  TACKLE_ATTEMPTED: 'tackleAttempted',
+  TACKLE_SUCCESS: 'tackleSuccess',
+  PLAYER_SWITCHED: 'playerSwitched',
 });
 
 /* ---------- CONFIGURATION (Step 4) ----------
@@ -651,10 +664,35 @@ const AI_CONFIG = {
 };
 
 const CONTROL_CONFIG = {
-  stickRadius: 42, // on-screen touch control, not world-space — not scaled
+  stickRadius: 42, // on-screen touch control, not world-space -- not scaled
   autoSwitchDist: 140 * WORLD_RADIAL_SCALE,
   autoSwitchMargin: 25 * WORLD_RADIAL_SCALE,
   autoSwitchCooldownMs: 600,
+};
+
+/* ---------- BALL CONTROL / DRIBBLE CONFIGURATION (Phase 5, Step 2-3) ----------
+   Extends the existing CONTROL_CONFIG/PLAYER_CONFIG rather than a parallel
+   system. "Owner" is a persisted possession state (state.ball.ownerId),
+   distinct from the pre-existing per-frame state.lastTouch (which only
+   ever recorded who touched the ball most recently, for stats/restart
+   attribution, and keeps doing exactly that, unchanged). Values scale
+   with WORLD_RADIAL_SCALE like every other Phase 4/5 spatial config. */
+const BALL_CONTROL_CONFIG = {
+  possessionRadius: 20 * WORLD_RADIAL_SCALE,
+  releaseDistance: 34 * WORLD_RADIAL_SCALE,
+  carryingSpeedCap: 3 * WORLD_RADIAL_SCALE,
+  dribbleLeadDistance: 11 * WORLD_RADIAL_SCALE,
+  dribbleLeadDistanceSprint: 17 * WORLD_RADIAL_SCALE,
+  // Strength/cap are deliberately generous relative to top player speed
+  // (base+dash, scaled by WORLD_RADIAL_SCALE) so the ball can always
+  // keep pace with a moving dribbler instead of gradually falling behind
+  // a continuously-receding lead point and eventually releasing itself.
+  dribbleNudgeStrength: 0.55,
+  dribbleMaxNudgePerFrame: 14 * WORLD_RADIAL_SCALE,
+};
+const SHOT_CHARGE_CONFIG = {
+  maxChargeMs: 900,
+  maxBonusMultiplier: 0.45,
 };
 
 const AUDIO_CONFIG = {
@@ -1266,6 +1304,9 @@ let state = {
   aiSubCheckTimer: 0,
   aiSubCooldowns: {}, // teamKey -> last AI sub time(ms)
   tacticalPanelOpen: false,
+  // ---- Phase 5: human-player shot charging (press SHOOT to charge, release to fire) ----
+  shootCharging: false,
+  shootChargeStart: 0,
 };
 
 /* ---------- INPUT SYSTEM (Step 10) ----------
@@ -1778,6 +1819,7 @@ function startMatch() {
   document.getElementById('away-abbr').textContent = state.awayTeam.abbr;
   state.scoreHome = 0; state.scoreAway = 0;
   state.goalFlash = 0;
+  state.shootCharging = false; state.shootChargeStart = 0; // Phase 5: no charge carries over into a new/replayed match
   createTeams();
   const field = state.homePlayers.find(p => !p.isGK) || state.homePlayers[0];
   state.controlledId = field.id;
@@ -1972,7 +2014,7 @@ function makePlayer(data, team, pos, isHome, isStarter) {
 }
 
 function resetBall() {
-  state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8 * WORLD_RADIAL_SCALE };
+  state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8 * WORLD_RADIAL_SCALE, ownerId: null, aerial: false, aerialFramesLeft: 0 }; // Phase 5: ownerId is the persisted-possession layer; null = loose ball; aerial is the brief lofted-pass flight window
   state.homePlayers.forEach((p, i) => {
     if (p.discipline.sentOff) return; // Step 7: don't re-place a sent-off player
     const fp = formation(state.teamSize, true)[i];
@@ -1996,6 +2038,17 @@ function findPlayerById(id) {
   if (id == null) return null;
   return allPlayers().find(p => p.id === id) || null;
 }
+// Phase 5, Step 7: single place that actually changes who's controlled,
+// so every switch path (auto-switch, red-card/sub handoff) emits the same
+// pair of events instead of each call site doing it slightly differently.
+function switchControlTo(player, reason) {
+  if (!player || state.controlledId === player.id) return;
+  const fromId = state.controlledId;
+  state.controlledId = player.id;
+  if (state.match) state.match.selectedPlayer = player.id;
+  EventBus.emit(GameEvents.PLAYER_SWITCHED, { fromId, toId: player.id, reason: reason || 'unspecified' });
+  EventBus.emit(GameEvents.PLAYER_CONTROL_CHANGED, { playerId: player.id, reason: reason || 'unspecified' });
+}
 function getControlled() {
   const cur = state.homePlayers.find(p => p.id === state.controlledId);
   if (cur && !cur.discipline.sentOff) return cur;
@@ -2003,10 +2056,7 @@ function getControlled() {
   // next available outfield player, same fallback order as Phase 1.
   const fallback = state.homePlayers.find(p => !p.isGK && !p.discipline.sentOff)
     || state.homePlayers.find(p => !p.discipline.sentOff);
-  if (fallback && fallback.id !== state.controlledId) {
-    state.controlledId = fallback.id;
-    if (state.match) state.match.selectedPlayer = fallback.id;
-  }
+  if (fallback && fallback.id !== state.controlledId) switchControlTo(fallback, 'sent off');
   return fallback;
 }
 
@@ -2027,8 +2077,7 @@ function autoSwitchIfNeeded() {
       if (d < bestD - CONTROL_CONFIG.autoSwitchMargin) { bestD = d; best = t; }
     }
     if (best.id !== p.id) {
-      state.controlledId = best.id;
-      if (state.match) state.match.selectedPlayer = best.id;
+      switchControlTo(best, 'auto'); // Phase 5, Step 7
       state.lastAutoSwitch = now;
       updateSelectedInfo();
     }
@@ -2114,6 +2163,7 @@ function loop(now) {
     updateAI(dt);
     updateBall(dt);
     resolveCollisions();
+    updateBallControl(dt); // Phase 5, Step 2-3: possession/dribble layer, additive on top of the physics above
     sanitizeAllEntities(); // Step 18/23: guard against NaN/Infinity before render
     checkGoals();
     if (!(state.goalFlash > 0)) checkBoundaries(); // Step 13: a goal this frame always wins over an OOB read
@@ -2193,7 +2243,8 @@ function considerAISubstitution(isHome) {
 }
 
 function sanitizeAllEntities() {
-  if (!state.ball || !isFiniteNum(state.ball.x)) state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8 }; // Step 23: missing/corrupt ball
+  if (!state.ball || !isFiniteNum(state.ball.x)) state.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0, r: 8, ownerId: null, aerial: false, aerialFramesLeft: 0 }; // Step 23: missing/corrupt ball
+  if (state.ball.ownerId != null && !findPlayerById(state.ball.ownerId)) releaseBallControl('owner no longer on pitch'); // Phase 5: guard against a stale/invalid owner reference
   sanitizeEntity(state.ball, PITCH.w / 2, PITCH.h / 2);
   for (const p of allPlayers()) sanitizeEntity(p, PITCH.w / 2, PITCH.h / 2);
 }
@@ -2215,6 +2266,16 @@ function runIntegrityCheck(dt) {
   if (state.setPiece && state.setPiece.active && !['FREE_KICK', 'PENALTY', 'CORNER', 'GOAL_KICK', 'THROW_IN'].includes(state.setPiece.type)) {
     console.warn('[Integrity] invalid set-piece type, cancelling', state.setPiece.type);
     SetPieceManager.finish();
+  }
+  // Phase 5, Step 16: ball possession/control state must always reference
+  // a real, active (not sent-off) player, or be null (loose ball).
+  if (state.ball) {
+    if (!isFiniteNum(state.ball.ownerId) && state.ball.ownerId !== null) console.warn('[Integrity] ball.ownerId is not a number or null', state.ball.ownerId);
+    else if (state.ball.ownerId != null) {
+      const owner = findPlayerById(state.ball.ownerId);
+      if (!owner || owner.discipline.sentOff) { console.warn('[Integrity] ball owned by an invalid/sent-off player, releasing', state.ball.ownerId); releaseBallControl('integrity check'); }
+    }
+    if (!isFiniteNum(state.ball.aerialFramesLeft)) state.ball.aerialFramesLeft = 0;
   }
   const activeHome = state.homePlayers.filter(p => !p.discipline.sentOff).length;
   const activeAway = state.awayPlayers.filter(p => !p.discipline.sentOff).length;
@@ -2241,9 +2302,18 @@ function runIntegrityCheck(dt) {
   }
 }
 
+// Phase 5, Step 1: coarse movement-state classification, exposed for any
+// future UI/AI consumer -- purely descriptive, changes no physics.
+function classifyMovementState(p, topSpeed) {
+  const sp = Math.hypot(p.vx, p.vy);
+  if (sp < 0.3) return 'idle';
+  if (sp > topSpeed * 1.05) return 'sprinting';
+  if (sp > topSpeed * 0.5) return 'running';
+  return 'walking';
+}
 function updateControlled(dt) {
   const p = getControlled();
-  if (!p || p.stunned > 0) { if (p) p.stunned -= dt; return; }
+  if (!p || p.stunned > 0) { if (p) { p.stunned -= dt; state.shootCharging = false; } return; }
   const { dx, dy } = InputManager.moveVector();
   const dash = InputManager.isDash();
   const base = PLAYER_CONFIG.baseSpeedMin + (p.speed / 100) * PLAYER_CONFIG.speedScale;
@@ -2256,10 +2326,28 @@ function updateControlled(dt) {
   p.x += p.vx * dt; p.y += p.vy * dt;
   clampPlayer(p);
   StaminaSystem.update(p, dt, dash);
+  p.movementState = classifyMovementState(p, base * PLAYER_CONFIG.dashMultiplier); // Phase 5, Step 1
   if (p.cooldown > 0) p.cooldown -= dt;
-  if (InputManager.isShoot() && p.cooldown <= 0) doShoot(p, dash);
-  if (InputManager.isPass() && p.cooldown <= 0) doPass(p, false);
-  if (InputManager.isThrough() && p.cooldown <= 0) doPass(p, true);
+  // Phase 5, Step 5: SHOOT is press-to-charge / release-to-fire. A quick
+  // tap (press then release within a frame or two, same as every shot
+  // before this phase) still fires at essentially base power (chargeRatio
+  // ~0); holding it longer (up to SHOT_CHARGE_CONFIG.maxChargeMs) adds up
+  // to +45% power on release. AI shooting (updateAI -> doShoot directly)
+  // is completely untouched by this -- it never goes through InputManager.
+  const shooting = InputManager.isShoot();
+  if (p.cooldown <= 0 && shooting && !state.shootCharging) {
+    state.shootCharging = true; state.shootChargeStart = performance.now();
+  } else if (state.shootCharging && !shooting) {
+    const held = performance.now() - state.shootChargeStart;
+    const ratio = isFiniteNum(held) ? Math.max(0, Math.min(1, held / SHOT_CHARGE_CONFIG.maxChargeMs)) : 0;
+    state.shootCharging = false;
+    if (p.cooldown <= 0) doShoot(p, dash, ratio);
+  } else if (state.shootCharging && p.cooldown > 0) {
+    state.shootCharging = false; // cooldown kicked in (e.g. another action) mid-charge -- drop it rather than fire a stale charge
+  }
+  // Phase 5, Step 4: DASH held at the moment of PASS/THROUGH = driven/lofted variant (see doPass()).
+  if (InputManager.isPass() && p.cooldown <= 0) doPass(p, false, dash);
+  if (InputManager.isThrough() && p.cooldown <= 0) doPass(p, true, dash);
   if (InputManager.isTackle() && p.cooldown <= 0) doTackle(p);
 }
 
@@ -2276,13 +2364,21 @@ function nearestTeammate(from, teammates) {
   return best;
 }
 
-function doShoot(p, powerUp) {
+function doShoot(p, powerUp, chargeRatio) {
   const b = state.ball;
   if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r + PLAYER_CONFIG.shootRange) return;
+  EventBus.emit(GameEvents.SHOT_ATTEMPTED, { home: p.isHome, playerId: p.id }); // Phase 5, Step 13
+  releaseBallControl('shot'); // Phase 5, Step 2: a struck ball is never still "carried"
   const goalX = p.isHome ? PITCH.w - PITCH.margin : PITCH.margin;
   const goalY = PITCH.h / 2 + (Math.random() - 0.5) * 50 * WORLD_SCALE_Y;
   const ang = Math.atan2(goalY - p.y, goalX - p.x);
-  const power = (8.5 * WORLD_RADIAL_SCALE + p.power / 100 * 5.5 * WORLD_RADIAL_SCALE) * (powerUp ? 1.3 : 1);
+  // Phase 5, Step 5: charge-based power. chargeRatio (0..1, from how long
+  // SHOOT was held -- see updateControlled) ADDS on top of the existing
+  // base/powerUp power; a chargeRatio of 0 (an instant tap, same as every
+  // existing shot before this phase, AI included) reproduces the exact
+  // original power calculation unchanged.
+  const chargeMul = 1 + Math.max(0, Math.min(1, chargeRatio || 0)) * SHOT_CHARGE_CONFIG.maxBonusMultiplier;
+  const power = (8.5 * WORLD_RADIAL_SCALE + p.power / 100 * 5.5 * WORLD_RADIAL_SCALE) * (powerUp ? 1.3 : 1) * chargeMul;
   b.vx = Math.cos(ang) * power + p.vx * 0.25;
   b.vy = Math.sin(ang) * power + p.vy * 0.25;
   p.cooldown = PLAYER_CONFIG.shootCooldown;
@@ -2295,14 +2391,25 @@ function doShoot(p, powerUp) {
   EventBus.emit(GameEvents.SHOT, { home: p.isHome, onTarget: true, playerId: p.id });
 }
 
-function doPass(p, through) {
+function doPass(p, through, driven) {
   const b = state.ball;
   if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r + PLAYER_CONFIG.passRange) return;
+  EventBus.emit(GameEvents.PASS_ATTEMPTED, { home: p.isHome, playerId: p.id, through: !!through, driven: !!driven }); // Phase 5, Step 13
+  releaseBallControl('pass'); // Phase 5, Step 2
   const teammates = p.isHome ? state.homePlayers : state.awayPlayers;
   const target = nearestTeammate(p, teammates);
   let completed = false;
+  // Phase 5, Step 4: driven = DASH held at the moment of the pass input.
+  // A ground pass held this way is simply struck harder (requirement #2,
+  // "strong/driven ground pass") -- a through-ball held this way becomes
+  // a simplified lofted/long ball (requirement #4): extra reach AND, for
+  // a short aerial window, it travels OVER outfield defenders rather than
+  // colliding with the first body in its path (see the b.aerial flag,
+  // consumed by resolveCollisions()). The engine has no real height axis,
+  // so this is an honest simplification of "lofted", not a true arc.
+  const drivenMul = driven ? 1.35 : 1;
   if (!target) {
-    b.vx = Math.cos(p.facing) * 7 * WORLD_RADIAL_SCALE; b.vy = Math.sin(p.facing) * 7 * WORLD_RADIAL_SCALE;
+    b.vx = Math.cos(p.facing) * 7 * WORLD_RADIAL_SCALE * drivenMul; b.vy = Math.sin(p.facing) * 7 * WORLD_RADIAL_SCALE * drivenMul;
   } else {
     completed = true;
     // Step 14: offside is only ever evaluated for an actual forward
@@ -2316,12 +2423,14 @@ function doPass(p, through) {
     }
     let tx = target.x, ty = target.y;
     if (through) {
-      tx += (p.isHome ? 70 : -70) * WORLD_SCALE_X + Math.cos(target.facing || 0) * 40 * WORLD_RADIAL_SCALE;
+      const leadMul = driven ? 1.8 : 1;
+      tx += (p.isHome ? 70 : -70) * WORLD_SCALE_X * leadMul + Math.cos(target.facing || 0) * 40 * WORLD_RADIAL_SCALE;
       ty += Math.sin(target.facing || 0) * 15 * WORLD_RADIAL_SCALE;
     }
     const ang = Math.atan2(ty - p.y, tx - p.x);
-    const power = (through ? 9 + p.skill / 100 * 3 : 6.5 + p.skill / 100 * 2.5) * WORLD_RADIAL_SCALE;
+    const power = (through ? 9 + p.skill / 100 * 3 : 6.5 + p.skill / 100 * 2.5) * WORLD_RADIAL_SCALE * drivenMul;
     b.vx = Math.cos(ang) * power; b.vy = Math.sin(ang) * power;
+    if (through && driven) { b.aerial = true; b.aerialFramesLeft = 26; } // Phase 5, Step 4: brief over-the-top window
     if (Math.random() < 0.35) showCommentary(randomLine('goodPass'), 1800);
   }
   p.cooldown = PLAYER_CONFIG.passCooldown;
@@ -2329,6 +2438,7 @@ function doPass(p, through) {
   state.lastTouch = { isHome: p.isHome, playerId: p.id };
   state.lastPassBy = { playerId: p.id, isHome: p.isHome, time: state.match ? state.match.matchTime : 0 };
   EventBus.emit(GameEvents.PASS, { home: p.isHome, through: !!through, playerId: p.id, completed });
+  if (completed) EventBus.emit(GameEvents.PASS_COMPLETED, { home: p.isHome, playerId: p.id, through: !!through }); // Phase 5, Step 13
 }
 
 function doTackle(p) {
@@ -2338,6 +2448,7 @@ function doTackle(p) {
   for (const o of opponents) {
     if (o.discipline.sentOff) continue; // Step 23: can't tackle a player who's left the pitch
     if (Math.hypot(o.x - p.x, o.y - p.y) < range) {
+      EventBus.emit(GameEvents.TACKLE_ATTEMPTED, { home: p.isHome, playerId: p.id, targetId: o.id }); // Phase 5, Step 13
       // Step 4-5: the referee gets first look at every in-range tackle.
       // If it's a foul, the normal Phase 1 success/failure outcome
       // below is skipped — the restart is handled by RefereeSystem.
@@ -2350,8 +2461,10 @@ function doTackle(p) {
         if (Math.hypot(state.ball.x - o.x, state.ball.y - o.y) < 32 * WORLD_RADIAL_SCALE) {
           state.ball.vx = (p.x - o.x) * 0.1; state.ball.vy = (p.y - o.y) * 0.1;
           state.lastTouch = { isHome: p.isHome, playerId: p.id };
+          setBallControl(p); // Phase 5, Step 2/6: a successful tackle that wins the ball hands possession straight to the tackler
         }
         if (Math.random() < 0.4) showCommentary(randomLine('tackle'), 1600);
+        EventBus.emit(GameEvents.TACKLE_SUCCESS, { home: p.isHome, playerId: p.id, targetId: o.id }); // Phase 5, Step 13
       } else p.stunned = PLAYER_CONFIG.tackleFailStun;
       EventBus.emit(GameEvents.TACKLE, { home: p.isHome, success, playerId: p.id });
       break;
@@ -2480,10 +2593,12 @@ function updateGK(p, dt, isHome) {
       ball.vx *= 0.15; ball.vy *= 0.15;
       ball.x = p.x + (isHome ? 12 : -12) * WORLD_RADIAL_SCALE; ball.y = p.y;
       state.lastTouch = { isHome, playerId: p.id };
+      setBallControl(p); // Phase 5, Step 2: a caught ball is possession for the keeper, same as any other pickup
       if (Math.random() < G.releaseChancePerDt * dt) {
         const ang = isHome ? 0.3 + Math.random() * 0.6 : Math.PI - 0.3 - Math.random() * 0.6;
         ball.vx = Math.cos(ang) * 8 * WORLD_RADIAL_SCALE; ball.vy = Math.sin(ang) * 5 * WORLD_RADIAL_SCALE;
         AudioManager.pass();
+        releaseBallControl('gk release'); // Phase 5: the keeper's throw/roll releases it back into play
       }
     }
   }
@@ -2521,6 +2636,7 @@ function updateBall(dt) {
 function resolveCollisions() {
   const players = activePlayers(), b = state.ball; // Step 25: sent-off players don't collide
   for (const p of players) {
+    if (b.aerial) continue; // Phase 5, Step 4: a lofted ball in its brief flight window passes over outfield players uncontested
     const dx = b.x - p.x, dy = b.y - p.y, dist = Math.hypot(dx, dy), minD = p.r + b.r;
     if (dist < minD && dist > 0.1) {
       const nx = dx / dist, ny = dy / dist;
@@ -2542,6 +2658,82 @@ function resolveCollisions() {
         a.x -= nx * push; a.y -= ny * push; c.x += nx * push; c.y += ny * push;
         if (a.isHome !== c.isHome) RefereeSystem.evaluateCollision(a, c); // Step 4: only cross-team contact can be a foul
       }
+    }
+  }
+}
+
+/* =====================================================================
+   BALL CONTROL SYSTEM (Phase 5, Steps 2-3)
+   An additive layer on top of the existing, unchanged ball physics
+   above: resolveCollisions() still does every bit of actual ball-vs-
+   player/player-vs-player physics it always did. This only tracks WHO
+   currently has persisted possession (state.ball.ownerId, as opposed to
+   the pre-existing per-touch state.lastTouch) and applies a small,
+   capped-per-frame steering nudge so a carried ball doesn't just bounce
+   off the dribbler like a stray physics object. Every correction here
+   is bounded (BALL_CONTROL_CONFIG.dribbleMaxNudgePerFrame) and NaN-safe
+   (guarded divisions, existing sanitizeAllEntities() still runs after).
+   ===================================================================== */
+function setBallControl(player) {
+  const b = state.ball;
+  if (!b || !player) return;
+  if (b.ownerId === player.id) return;
+  if (b.ownerId != null) releaseBallControl('possession changed');
+  b.ownerId = player.id;
+  EventBus.emit(GameEvents.BALL_CONTROL_GAINED, { home: player.isHome, playerId: player.id });
+}
+function releaseBallControl(reason) {
+  const b = state.ball;
+  if (!b || b.ownerId == null) return;
+  const prevId = b.ownerId;
+  const prev = findPlayerById(prevId);
+  b.ownerId = null;
+  EventBus.emit(GameEvents.BALL_CONTROL_LOST, { home: prev ? prev.isHome : null, playerId: prevId, reason: reason || 'unspecified' });
+}
+function updateBallControl(dt) {
+  const b = state.ball;
+  if (!b || !isFiniteNum(b.x)) return; // sanitizeAllEntities() will repair the ball itself; just skip this frame's control logic
+  if (b.aerial) {
+    b.aerialFramesLeft = (b.aerialFramesLeft || 0) - dt;
+    if (b.aerialFramesLeft <= 0) { b.aerial = false; b.aerialFramesLeft = 0; }
+  }
+  const ballSpeed = Math.hypot(b.vx, b.vy);
+  // Step 2: owner loses the ball once it's too far away, sent off, or gone.
+  if (b.ownerId != null) {
+    const owner = findPlayerById(b.ownerId);
+    if (!owner || owner.discipline.sentOff || Math.hypot(owner.x - b.x, owner.y - b.y) > BALL_CONTROL_CONFIG.releaseDistance) {
+      releaseBallControl(!owner ? 'invalid owner' : (owner.discipline.sentOff ? 'sent off' : 'out of range'));
+    }
+  }
+  // Step 2: a loose ball close enough to exactly one or more active players,
+  // moving slowly enough that this is plainly a touch/first-touch and not a
+  // shot/pass still in flight, is picked up by the closest of them.
+  if (b.ownerId == null && !b.aerial && ballSpeed < BALL_CONTROL_CONFIG.carryingSpeedCap * 2) {
+    let nearest = null, nearestD = Infinity;
+    for (const p of activePlayers()) {
+      const d = Math.hypot(p.x - b.x, p.y - b.y);
+      if (d < nearestD) { nearestD = d; nearest = p; }
+    }
+    if (nearest && nearestD < BALL_CONTROL_CONFIG.possessionRadius) setBallControl(nearest);
+  }
+  // Step 3: dribbling -- only while genuinely carrying (ball speed below
+  // the carrying cap, i.e. not the instant after a shot/pass), nudge the
+  // ball toward a spot just ahead of the owner, scaled by how fast they're
+  // moving (a sprint gets a slightly longer/heavier touch, Step 3).
+  if (b.ownerId != null) {
+    const owner = findPlayerById(b.ownerId);
+    if (owner && !owner.discipline.sentOff && ballSpeed < BALL_CONTROL_CONFIG.carryingSpeedCap) {
+      const ownerSpeed = Math.hypot(owner.vx, owner.vy);
+      const topSpeed = PLAYER_CONFIG.baseSpeedMin + owner.speed / 100 * PLAYER_CONFIG.speedScale;
+      const sprinting = ownerSpeed > topSpeed * 1.05;
+      const moving = ownerSpeed > 0.25;
+      const lead = sprinting ? BALL_CONTROL_CONFIG.dribbleLeadDistanceSprint : BALL_CONTROL_CONFIG.dribbleLeadDistance;
+      const faceAng = moving ? Math.atan2(owner.vy, owner.vx) : owner.facing;
+      const tx = owner.x + Math.cos(faceAng) * lead, ty = owner.y + Math.sin(faceAng) * lead;
+      const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1;
+      const cap = BALL_CONTROL_CONFIG.dribbleMaxNudgePerFrame * Math.max(dt, 0);
+      const nudge = Math.min(d * BALL_CONTROL_CONFIG.dribbleNudgeStrength, cap);
+      if (isFiniteNum(nudge) && nudge > 0) { b.x += (dx / d) * nudge; b.y += (dy / d) * nudge; }
     }
   }
 }
@@ -2854,10 +3046,7 @@ const SubstitutionManager = {
     onPitch[idx] = incoming;
     bench[bIdx] = outgoing;
 
-    if (state.controlledId === outgoing.id) { // Step 3/7: hand control to the incoming player
-      state.controlledId = incoming.id;
-      if (state.match) state.match.selectedPlayer = incoming.id;
-    }
+    if (state.controlledId === outgoing.id) switchControlTo(incoming, 'substitution'); // Step 3/7, Phase 5 Step 7
 
     TacticalSystem.assignRoles(onPitch, isHome); // Step 7, 18: recalculate roles/anchors for the new XI
 
@@ -3076,6 +3265,7 @@ const SetPieceManager = {
   positionBall(s) {
     const b = state.ball;
     b.vx = 0; b.vy = 0;
+    releaseBallControl('set piece'); // Phase 5: a set piece always starts from a loose/placed ball, never a carried one
     if (s.type === 'PENALTY') { b.x = s.teamIsHome ? PITCH.margin + PITCH_CONFIG.penaltySpotOffset : PITCH.w - PITCH.margin - PITCH_CONFIG.penaltySpotOffset; b.y = PITCH.h / 2; }
     else { b.x = s.location.x; b.y = s.location.y; }
   },
