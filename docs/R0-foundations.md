@@ -17,12 +17,15 @@ The game still ships as one static file, `football-game.html`, at the repository
 ## Commands (Node 18+; no installs needed)
 | Command | Purpose |
 |---|---|
-| `npm run build` | rebuild `football-game.html` from `src/` (fails if it differs from the recorded baseline) |
+| `npm run build:artifact` | rebuild `football-game.html` from `src/` (fails if it differs from the recorded baseline) |
 | `npm run build:check` | fail if the committed artifact differs from a fresh build (drift) |
 | `npm test` | all suites (`node --test`) |
 | `npm run test:build / :render / :engine / :sim / :data` | one suite each (shell glob expansion required) |
 | `npm run verify:artifact` | needs network: GET `/` and `/football-game.html`, compare SHA-256 |
 | `npm run golden:propose` | write `tests/golden/player-base.v1.candidate.json` (not approved) |
+
+The script is deliberately **not** named `build`: Vercel runs `npm run build` automatically when it exists, and the
+deployed file is already the committed artifact. (Found when branch previews failed with `src/manifest.json is missing`.)
 
 Exit codes of `build.js`: 0 ok, 1 manifest/source problem (missing or unlisted file), 2 baseline mismatch, 3 artifact drift.
 
