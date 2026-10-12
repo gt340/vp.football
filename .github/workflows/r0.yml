@@ -5,6 +5,8 @@ name: r0
 on:
   push:
     branches: [feature/r0-foundations]
+    paths-ignore:
+      - 'src/**'
   workflow_dispatch:
 permissions:
   contents: read
