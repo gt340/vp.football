@@ -1,0 +1,50 @@
+name: r0
+# R0 automation. (1) one-time: split the recorded baseline into src/ slices; the split script refuses any input
+# that is not the recorded Phase 5 baseline and verifies the slices re-concatenate to it before committing.
+# (2) test the resulting tree on Node 18, 20 and 22. No baseline text is hand-copied anywhere.
+on:
+  push:
+    branches: [feature/r0-foundations]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      head: ${{ steps.split.outputs.head }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: split
+        run: |
+          if [ ! -f src/manifest.json ]; then
+            node scripts/split-baseline.js
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src
+            git commit -m "chore(r0): extract baseline into src slices (automated, hash-verified)"
+            git push origin HEAD:feature/r0-foundations
+          fi
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  test:
+    needs: bootstrap
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bootstrap.outputs.head }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: git rev-parse HEAD
+      - run: npm run build:check
+      - run: npm test
