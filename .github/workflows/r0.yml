@@ -32,7 +32,8 @@ jobs:
             git commit -m "chore(r0): extract baseline into src slices (automated, hash-verified)"
             git push origin HEAD:feature/r0-foundations
           fi
-          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git fetch origin feature/r0-foundations
+echo "head=$(git rev-parse origin/feature/r0-foundations)" >> "$GITHUB_OUTPUT"
   test:
     needs: bootstrap
     runs-on: ubuntu-latest
