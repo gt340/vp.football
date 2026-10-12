@@ -1,0 +1,88 @@
+name: r0
+# R0 automation for feature/r0-foundations.
+#  1. bootstrap: if src/manifest.json is absent, split the recorded Phase 5 baseline into src/ slices (the splitter
+#     refuses any input whose byte count / SHA-256 differs from tests/fixtures/baseline.json and verifies the slices
+#     re-concatenate to it before writing anything), commit ONLY src/ files and push. If it is present, nothing is
+#     regenerated or overwritten. Either way the branch tip is fetched, checked, and exported as an output.
+#  2. test: check out exactly that commit and run build:check + the full test suite on Node 18, 20 and 22.
+# Loop safety: the bootstrap push is made with the default GITHUB_TOKEN, and GitHub does not start new workflow runs
+# for pushes made with GITHUB_TOKEN. Even if a run were triggered anyway, it would find src/manifest.json, skip the
+# split, create no commit, and therefore end the chain. Ordinary pushes (including to src/) always run the tests.
+on:
+  push:
+    branches: [feature/r0-foundations]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: r0-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      head: ${{ steps.split.outputs.head }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: split
+        env:
+          BRANCH: feature/r0-foundations
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/$BRANCH" ]; then
+            echo "this workflow only runs on $BRANCH (got $GITHUB_REF)" >&2
+            exit 1
+          fi
+          for f in scripts/split-baseline.js scripts/build.js tests/fixtures/baseline.json package.json; do
+            [ -f "$f" ] || { echo "missing required file: $f" >&2; exit 1; }
+          done
+          if [ ! -f src/manifest.json ]; then
+            node scripts/split-baseline.js
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src
+            n=0
+            while IFS= read -r p; do
+              case "$p" in
+                src/*) n=$((n + 1)) ;;
+                *) echo "refusing to commit non-src path: $p" >&2; exit 1 ;;
+              esac
+            done < <(git diff --cached --name-only)
+            [ "$n" -gt 0 ] || { echo "the splitter staged no files" >&2; exit 1; }
+            git commit -m "chore(r0): extract baseline into src slices (automated, hash-verified)"
+            git push origin "HEAD:refs/heads/$BRANCH"
+          else
+            echo "src/manifest.json already present: not regenerating source slices"
+          fi
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          git cat-file -e "origin/$BRANCH:src/manifest.json"
+          echo "head=$(git rev-parse "origin/$BRANCH")" >> "$GITHUB_OUTPUT"
+  test:
+    needs: bootstrap
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bootstrap.outputs.head }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Confirm the exact commit under test
+        env:
+          EXPECTED: ${{ needs.bootstrap.outputs.head }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test -f src/manifest.json
+          git rev-parse HEAD
+      - run: npm run build:check
+      - run: npm test
