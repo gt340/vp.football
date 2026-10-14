@@ -37,10 +37,13 @@ update this record in its own reviewed commit.
 
 ## Golden player-render baseline
 `tests/golden/player-base.v1.json` is a draw-call signature of `drawPlayer()` captured from the Phase 5 artifact.
-Its status is **CAPTURED_FROM_BASELINE_PENDING_COMMANDER_APPROVAL**. Ordinary test runs only read it. To change it:
+Its status is **APPROVED_DRAWING_INSTRUCTION_REFERENCE** (Commander approval, 2026-10-13, limited to the existing
+appearance and deterministic drawing instructions; not approval of future visual changes). Pixel equality between the
+original, rebuilt and production-served artifacts was verified with zero differences in headless Chromium 141 on desktop
+only: no Android Chrome, physical-device, GPU or cross-browser equivalence is claimed. Ordinary test runs only read it. To change it:
 run `npm run golden:propose`, review the candidate, and promote it in a separate commit with explicit approval.
-The signature proves drawing *instructions* are unchanged; it does not prove rasterised pixels. A manual screenshot
-review in a real browser is still required.
+The signature proves drawing *instructions* are unchanged; it does not prove rasterised pixels. Browser-level comparison
+covered headless desktop Chromium only; Android and physical-device review remains outstanding.
 
 ## What the tests do NOT prove
 Real-browser pixels, touch input, audio, Android performance, or that the football rules are *correct* (only that

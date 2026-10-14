@@ -17,8 +17,12 @@ function report(label, r) {
   return lines.join('\n');
 }
 
-test('golden file is marked as pending Commander approval and tied to the recorded baseline', () => {
-  assert.equal(golden.status, 'CAPTURED_FROM_BASELINE_PENDING_COMMANDER_APPROVAL');
+test('golden file records the Commander approval (limited scope) and is tied to the recorded baseline', () => {
+  assert.equal(golden.status, 'APPROVED_DRAWING_INSTRUCTION_REFERENCE');
+  assert.equal(golden.approval.by, 'Commander');
+  assert.match(golden.approval.scope, /not approval of future visual changes/i);
+  assert.match(golden.approval.limitations, /headless Chromium/);
+  assert.match(golden.approval.limitations, /No Android Chrome, physical-device, GPU, or cross-browser equivalence is claimed/);
   const baseline = JSON.parse(fs.readFileSync(path.join(REPO, 'tests/fixtures/baseline.json'), 'utf8'));
   assert.equal(golden.capturedFrom.sha256, baseline.sha256);
   assert.deepEqual(Object.keys(golden.cases), CASES.map((c) => c.name));

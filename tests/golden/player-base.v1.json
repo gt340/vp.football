@@ -1,7 +1,8 @@
 {
  "golden": "player-base",
- "status": "CAPTURED_FROM_BASELINE_PENDING_COMMANDER_APPROVAL",
- "capturedFrom": {"sha256":"84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d","note":"Phase 5 artifact (root football-game.html == recorded baseline). Not yet reviewed by the Commander."},
+ "status": "APPROVED_DRAWING_INSTRUCTION_REFERENCE",
+ "approval": {"by":"Commander","date":"2026-10-13","scope":"Existing toy-style player appearance and deterministic drawing instructions only; not approval of future visual changes.","evidence":"Draw-call signature plus zero-difference canvas comparisons (original vs rebuilt vs production-served) in headless Chromium 141.0.7390.37, desktop.","limitations":"Pixel equality verified only in headless Chromium on desktop. No Android Chrome, physical-device, GPU, or cross-browser equivalence is claimed."},
+ "capturedFrom": {"sha256":"84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d","note":"Phase 5 artifact (root football-game.html == recorded baseline)."},
  "signatureSha256": "bd15c498b16958e545a3d6f0e3e0c6447f671ec10f168a5fa922b580b460190d",
  "signatureVersion": 1,
  "cases": {
