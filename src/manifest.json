@@ -1,0 +1,31 @@
+{
+  "manifestVersion": 1,
+  "output": "football-game.html",
+  "description": "Ordered, verbatim slices of the Phase 5 baseline. Concatenation order IS the build.",
+  "files": [
+    "src/shell/head.html",
+    "src/shell/styles.css",
+    "src/shell/body.html",
+    "src/data/static-data.js",
+    "src/engine/events-and-config.js",
+    "src/engine/state-and-persistence.js",
+    "src/input/input-manager.js",
+    "src/engine/audio-and-commentary.js",
+    "src/ui/menu-and-panels.js",
+    "src/input/touch-controls.js",
+    "src/rendering/camera.js",
+    "src/engine/match-flow.js",
+    "src/engine/gameplay-core.js",
+    "src/engine/ball-control.js",
+    "src/engine/stamina-and-tactics.js",
+    "src/engine/substitution-manager.js",
+    "src/engine/referee-system.js",
+    "src/engine/set-piece-manager.js",
+    "src/engine/boundary-engine.js",
+    "src/rendering/pitch-renderer.js",
+    "src/rendering/player-renderer.js",
+    "src/engine/pitch-geometry-check.js",
+    "src/engine/init.js",
+    "src/shell/tail.html"
+  ]
+}

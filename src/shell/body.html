@@ -1,0 +1,158 @@
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game"></canvas>
+  <button id="sound-toggle">🔊 Sound</button>
+
+  <div id="hud" class="hidden">
+    <div class="scoreboard">
+      <span class="team-dot" id="home-dot"></span>
+      <span class="team-abbr" id="home-abbr">HOME</span>
+      <span id="score-home">0</span>
+      <span style="opacity:0.45">–</span>
+      <span id="score-away">0</span>
+      <span class="team-abbr" id="away-abbr">AWAY</span>
+      <span class="team-dot" id="away-dot"></span>
+    </div>
+    <div class="timer-box" id="timer">5:00</div>
+  </div>
+  <div id="selected-info" class="hidden"></div>
+  <div id="commentary"></div>
+  <div id="goal-banner">GOAL!</div>
+  <div id="rules-banner"></div>
+  <button id="match-menu-toggle">⚙ Squad</button>
+  <div id="match-panel" class="hidden">
+    <div id="match-panel-close">✕</div>
+    <div id="match-panel-tabs">
+      <div class="mp-tab active" data-tab="tactics">Tactics</div>
+      <div class="mp-tab" data-tab="bench">Bench</div>
+    </div>
+    <div id="match-panel-body">
+      <div class="mp-section" id="mp-tactics">
+        <div class="panel" style="margin:0 0 8px">
+          <h2 style="margin-bottom:6px">Formation</h2>
+          <div class="match-opts" id="im-formation-opts">
+            <div class="opt-chip" data-val="4-3-3">4-3-3</div>
+            <div class="opt-chip" data-val="4-4-2">4-4-2</div>
+            <div class="opt-chip" data-val="4-2-3-1">4-2-3-1</div>
+            <div class="opt-chip" data-val="3-5-2">3-5-2</div>
+            <div class="opt-chip" data-val="5-3-2">5-3-2</div>
+          </div>
+        </div>
+        <div class="panel" style="margin:0 0 8px">
+          <h2 style="margin-bottom:6px">Mentality</h2>
+          <div class="match-opts" id="im-mentality-opts">
+            <div class="opt-chip" data-val="DEFENSIVE">Defensive</div>
+            <div class="opt-chip" data-val="BALANCED">Balanced</div>
+            <div class="opt-chip" data-val="ATTACKING">Attacking</div>
+          </div>
+        </div>
+        <div class="panel" style="margin:0">
+          <h2 style="margin-bottom:6px">Style</h2>
+          <div class="match-opts" id="im-style-opts">
+            <div class="opt-chip" data-val="POSSESSION">Possession</div>
+            <div class="opt-chip" data-val="COUNTER_ATTACK">Counter Attack</div>
+            <div class="opt-chip" data-val="PRESSING">Pressing</div>
+            <div class="opt-chip" data-val="LOW_BLOCK">Low Block</div>
+          </div>
+        </div>
+      </div>
+      <div class="mp-section hidden" id="mp-bench">
+        <div id="mp-sub-count"></div>
+        <h2 style="color:#00d4aa;font-size:0.75rem;margin-bottom:6px">ON THE PITCH — tap to select who comes off</h2>
+        <div id="mp-onpitch-list"></div>
+        <h2 style="color:#00d4aa;font-size:0.75rem;margin:10px 0 6px">BENCH — tap to bring on</h2>
+        <div id="mp-bench-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <div id="stick-zone">
+      <div id="stick-base"></div>
+      <div id="stick-knob"></div>
+    </div>
+    <div id="actions">
+      <div class="ef-btn" id="btn-through">THROUGH</div>
+      <div class="ef-btn" id="btn-dash">DASH</div>
+      <div class="ef-btn" id="btn-tackle">TACKLE</div>
+      <div class="ef-btn" id="btn-pass">PASS</div>
+      <div class="ef-btn" id="btn-shoot">SHOOT</div>
+    </div>
+  </div>
+
+  <div id="menu-screen" class="screen">
+    <h1>eToy Football</h1>
+    <p class="subtitle">Real clubs · Commentary · Sounds · eFootball controls</p>
+    <div class="panel">
+      <h2>Your Club</h2>
+      <div class="team-select" id="team-select"></div>
+    </div>
+    <div class="panel">
+      <h2>Opponent</h2>
+      <div class="team-select" id="away-select"></div>
+    </div>
+    <div class="panel">
+      <h2>Match Length</h2>
+      <div class="match-opts" id="duration-opts">
+        <div class="opt-chip selected" data-val="180">3 min</div>
+        <div class="opt-chip" data-val="300">5 min</div>
+        <div class="opt-chip" data-val="480">8 min</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Team Size (incl. GK)</h2>
+      <div class="match-opts" id="size-opts">
+        <div class="opt-chip" data-val="5">5v5</div>
+        <div class="opt-chip selected" data-val="7">7v7</div>
+        <div class="opt-chip" data-val="11">11v11</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Your Tactics <span style="color:#8b9bb4;font-weight:400">(11v11 uses the formation shape; mentality/style apply to any size)</span></h2>
+      <div class="match-opts" id="formation-opts">
+        <div class="opt-chip" data-val="4-3-3">4-3-3</div>
+        <div class="opt-chip" data-val="4-4-2">4-4-2</div>
+        <div class="opt-chip" data-val="4-2-3-1">4-2-3-1</div>
+        <div class="opt-chip" data-val="3-5-2">3-5-2</div>
+        <div class="opt-chip" data-val="5-3-2">5-3-2</div>
+      </div>
+      <div class="match-opts" id="mentality-opts" style="margin-top:8px">
+        <div class="opt-chip" data-val="DEFENSIVE">Defensive</div>
+        <div class="opt-chip" data-val="BALANCED">Balanced</div>
+        <div class="opt-chip" data-val="ATTACKING">Attacking</div>
+      </div>
+      <div class="match-opts" id="style-opts" style="margin-top:8px">
+        <div class="opt-chip" data-val="POSSESSION">Possession</div>
+        <div class="opt-chip" data-val="COUNTER_ATTACK">Counter Attack</div>
+        <div class="opt-chip" data-val="PRESSING">Pressing</div>
+        <div class="opt-chip" data-val="LOW_BLOCK">Low Block</div>
+      </div>
+    </div>
+    <button class="btn" id="btn-to-players">Next: Choose Players</button>
+  </div>
+
+  <div id="players-screen" class="screen hidden">
+    <h1>Select Squad</h1>
+    <p class="subtitle">Include at least 1 GK · Exact size required</p>
+    <div class="panel" style="max-width:520px">
+      <h2>Players <span id="pick-count" style="color:#8b9bb4;font-weight:400"></span></h2>
+      <div class="player-grid" id="player-grid"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-secondary" id="btn-back-menu">Back</button>
+      <button class="btn" id="btn-kickoff" disabled>Kick Off</button>
+    </div>
+  </div>
+
+  <div id="result-screen" class="screen hidden">
+    <h1 id="result-title">Full Time</h1>
+    <div id="result-score">0 – 0</div>
+    <p id="result-msg" class="subtitle"></p>
+    <button class="btn" id="btn-replay">Play Again</button>
+    <button class="btn btn-secondary" id="btn-menu" style="margin-top:8px">Main Menu</button>
+  </div>
+</div>
+
+<script>

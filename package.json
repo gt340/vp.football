@@ -1,0 +1,19 @@
+{
+  "name": "vp-football",
+  "version": "0.0.0-r0",
+  "private": true,
+  "description": "eToy Football: source slices, build, and tests for the single-file deployable.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build:artifact": "node scripts/build.js",
+    "build:check": "node scripts/build.js --check",
+    "verify:artifact": "node scripts/verify-artifact.js",
+    "test": "node --test",
+    "test:build": "node --test tests/build/*.test.js",
+    "test:render": "node --test tests/render/*.test.js",
+    "test:engine": "node --test tests/engine/*.test.js",
+    "test:sim": "node --test tests/sim/*.test.js",
+    "test:data": "node --test tests/data/*.test.js",
+    "golden:propose": "node scripts/golden-propose.js"
+  }
+}
