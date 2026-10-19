@@ -1,0 +1,16 @@
+{
+  "recordVersion": 1,
+  "kind": "release",
+  "name": "phase5-approved",
+  "description": "Release record for the approved Phase 5 artifact served in production. The build verifies its output against this record. tests/fixtures/baseline.json is the separate, immutable record of the original Phase 5 baseline.",
+  "artifact": {
+    "path": "football-game.html",
+    "sha256": "84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d",
+    "bytes": 186426
+  },
+  "derivedFromBaseline": {
+    "record": "tests/fixtures/baseline.json",
+    "sha256": "84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d",
+    "bytes": 186426
+  }
+}
