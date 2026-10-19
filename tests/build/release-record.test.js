@@ -112,6 +112,7 @@ test('invalid release records fail the build (exit 1): missing, bad JSON, wrong 
     'zero bytes': (tmp) => { const r = readJson(tmp, 'release/release.json'); r.artifact.bytes = 0; writeJson(tmp, 'release/release.json', r); },
     'artifact path differs from the manifest output': (tmp) => { const r = readJson(tmp, 'release/release.json'); r.artifact.path = 'other.html'; writeJson(tmp, 'release/release.json', r); },
     'derivedFromBaseline differs from baseline.json': (tmp) => { const r = readJson(tmp, 'release/release.json'); r.derivedFromBaseline.sha256 = flipHex(r.derivedFromBaseline.sha256); writeJson(tmp, 'release/release.json', r); },
+    'wrong derivedFromBaseline record path': (tmp) => { const r = readJson(tmp, 'release/release.json'); r.derivedFromBaseline.record = 'somewhere-else.json'; writeJson(tmp, 'release/release.json', r); },
     'no name': (tmp) => { const r = readJson(tmp, 'release/release.json'); delete r.name; writeJson(tmp, 'release/release.json', r); },
   };
   for (const [name, mutate] of Object.entries(cases)) {
