@@ -64,14 +64,14 @@ test('unlisted source file fails the build (exit 1)', () => {
   } finally { rm(tmp); }
 });
 
-test('a tampered source slice is caught by the baseline gate (exit 2)', () => {
+test('a tampered source slice is caught by the release gate (exit 2)', () => {
   const tmp = copyRepo();
   try {
     const f = path.join(tmp, 'src/engine/ball-control.js');
     fs.appendFileSync(f, '// tamper\n');
     const r = node('scripts/build.js', [], tmp);
     assert.equal(r.code, 2);
-    assert.match(r.out, /does not match the recorded baseline/);
+    assert.match(r.out, /does not match the release record/);
   } finally { rm(tmp); }
 });
 
