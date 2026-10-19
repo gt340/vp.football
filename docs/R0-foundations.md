@@ -17,7 +17,7 @@ The game still ships as one static file, `football-game.html`, at the repository
 ## Commands (Node 18+; no installs needed)
 | Command | Purpose |
 |---|---|
-| `npm run build:artifact` | rebuild `football-game.html` from `src/` (fails if it differs from the recorded baseline) |
+| `npm run build:artifact` | rebuild `football-game.html` from `src/` (fails if it differs from the release record, `release/release.json`) |
 | `npm run build:check` | fail if the committed artifact differs from a fresh build (drift) |
 | `npm test` | all suites (`node --test`) |
 | `npm run test:build / :render / :engine / :sim / :data` | one suite each (shell glob expansion required) |
@@ -27,13 +27,13 @@ The game still ships as one static file, `football-game.html`, at the repository
 The script is deliberately **not** named `build`: Vercel runs `npm run build` automatically when it exists, and the
 deployed file is already the committed artifact. (Found when branch previews failed with `src/manifest.json is missing`.)
 
-Exit codes of `build.js`: 0 ok, 1 manifest/source problem (missing or unlisted file), 2 baseline mismatch, 3 artifact drift.
+Exit codes of `build.js`: 0 ok, 1 manifest/record/source problem (missing or unlisted file, invalid record), 2 release-record mismatch, 3 artifact drift.
 
 ## Baseline
 `tests/fixtures/baseline.json` records the Phase 5 artifact: 186,426 bytes, SHA-256
 `84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d`, git blob `63e075e6c5401a3ee8472080aec466149f8cebaf`.
-R0 requires the rebuilt artifact to equal it exactly. A later phase that intentionally changes the game must
-update this record in its own reviewed commit.
+This record is immutable. R0 required the rebuilt artifact to equal it exactly. Since R1-0 the build gates on the separate
+release record `release/release.json` instead; see `docs/release-record.md`.
 
 ## Golden player-render baseline
 `tests/golden/player-base.v1.json` is a draw-call signature of `drawPlayer()` captured from the Phase 5 artifact.
