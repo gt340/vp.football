@@ -82,6 +82,9 @@ if (typeof release.name !== 'string' || !release.name) die(1, `${RELEASE_REC} ne
 checkIdentity(release.artifact, `${RELEASE_REC} artifact`);
 if (release.artifact.path !== manifest.output) die(1, `${RELEASE_REC} artifact.path "${release.artifact.path}" must equal the manifest output "${manifest.output}"`);
 checkIdentity(release.derivedFromBaseline, `${RELEASE_REC} derivedFromBaseline`);
+if (release.derivedFromBaseline.record !== BASELINE_REC) {
+  die(1, `${RELEASE_REC} derivedFromBaseline.record must equal ${BASELINE_REC}`);
+}
 if (release.derivedFromBaseline.sha256 !== baseline.sha256 || release.derivedFromBaseline.bytes !== baseline.bytes) {
   die(1, `${RELEASE_REC} derivedFromBaseline does not match ${BASELINE_REC} (the original baseline is immutable)`);
 }
