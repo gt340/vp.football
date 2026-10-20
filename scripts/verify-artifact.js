@@ -3,7 +3,7 @@
 /*
  * Read-only HTTP check that served pages are byte-identical to an expected artifact.
  *   node scripts/verify-artifact.js [--base-url https://v-p-football.vercel.app] [--sha256 <hex>] [--bytes <n>] [--paths /,/football-game.html]
- * Defaults to the recorded baseline in tests/fixtures/baseline.json. Performs GET requests only. Needs network.
+ * Defaults to the approved release record in release/release.json. Performs GET requests only. Needs network.
  * Exit code 0 only if every path returns 200 with the expected SHA-256 (and byte count).
  */
 const fs = require('node:fs');
@@ -12,10 +12,10 @@ const crypto = require('node:crypto');
 
 const argv = process.argv.slice(2);
 const opt = (n, d) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : d; };
-const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tests', 'fixtures', 'baseline.json'), 'utf8'));
+const release = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'release', 'release.json'), 'utf8'));
 const baseUrl = opt('--base-url', 'https://v-p-football.vercel.app').replace(/\/+$/, '');
-const expectedSha = opt('--sha256', baseline.sha256);
-const expectedBytes = Number(opt('--bytes', baseline.bytes));
+const expectedSha = opt('--sha256', release.artifact.sha256);
+const expectedBytes = Number(opt('--bytes', release.artifact.bytes));
 const paths = opt('--paths', '/,/football-game.html').split(',');
 
 (async () => {

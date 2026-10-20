@@ -8,7 +8,12 @@
  *   node scripts/build.js --check    build in memory and fail if the committed artifact differs (drift)
  *   --root <dir>                     operate on another checkout (used by the tests)
  *
- * Exit codes: 0 ok | 1 manifest/source problem | 2 baseline mismatch | 3 committed artifact drift
+ * Exit codes: 0 ok | 1 manifest/record/source problem | 2 release-record mismatch | 3 committed artifact drift
+ *
+ * Two separate records are involved:
+ *   tests/fixtures/baseline.json  the IMMUTABLE record of the original Phase 5 artifact (never a build gate target for new work)
+ *   release/release.json          the approved release artifact; the build output must equal it
+ * The release record must reference the baseline record's identity (derivedFromBaseline), so neither can be changed silently.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -55,13 +60,41 @@ const built = Buffer.concat(manifest.files.map((rel) => fs.readFileSync(path.joi
 const digest = sha(built);
 const summary = { output: manifest.output, bytes: built.length, sha256: digest, files: manifest.files.length };
 
-// ---- R0 baseline gate: the rebuilt artifact must equal the recorded Phase 5 baseline ----
-const baselinePath = path.join(root, 'tests', 'fixtures', 'baseline.json');
-if (!fs.existsSync(baselinePath)) die(1, 'tests/fixtures/baseline.json is missing');
-const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-if (built.length !== baseline.bytes || digest !== baseline.sha256) {
-  die(2, `built artifact does not match the recorded baseline.\n  built:    ${built.length} bytes, sha256 ${digest}\n  baseline: ${baseline.bytes} bytes, sha256 ${baseline.sha256}`);
+// ---- records: the immutable Phase 5 baseline and the current release record ----
+const SHA_RE = /^[0-9a-f]{64}$/;
+const BASELINE_REC = 'tests/fixtures/baseline.json';
+const RELEASE_REC = 'release/release.json';
+function readRecord(rel) {
+  const p = path.join(root, rel);
+  if (!fs.existsSync(p)) die(1, `${rel} is missing`);
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { die(1, `${rel} is not valid JSON: ${e.message}`); }
 }
+function checkIdentity(id, label) {
+  if (!id || typeof id.sha256 !== 'string' || !SHA_RE.test(id.sha256) || !Number.isInteger(id.bytes) || id.bytes <= 0) {
+    die(1, `${label} must have a 64-character lowercase hex sha256 and a positive integer bytes`);
+  }
+}
+const baseline = readRecord(BASELINE_REC);
+checkIdentity(baseline, BASELINE_REC);
+const release = readRecord(RELEASE_REC);
+if (!release || release.recordVersion !== 1 || release.kind !== 'release') die(1, `${RELEASE_REC} must have recordVersion 1 and kind "release"`);
+if (typeof release.name !== 'string' || !release.name) die(1, `${RELEASE_REC} needs a non-empty name`);
+checkIdentity(release.artifact, `${RELEASE_REC} artifact`);
+if (release.artifact.path !== manifest.output) die(1, `${RELEASE_REC} artifact.path "${release.artifact.path}" must equal the manifest output "${manifest.output}"`);
+checkIdentity(release.derivedFromBaseline, `${RELEASE_REC} derivedFromBaseline`);
+if (release.derivedFromBaseline.record !== BASELINE_REC) {
+  die(1, `${RELEASE_REC} derivedFromBaseline.record must equal ${BASELINE_REC}`);
+}
+if (release.derivedFromBaseline.sha256 !== baseline.sha256 || release.derivedFromBaseline.bytes !== baseline.bytes) {
+  die(1, `${RELEASE_REC} derivedFromBaseline does not match ${BASELINE_REC} (the original baseline is immutable)`);
+}
+
+// ---- release gate: the rebuilt artifact must equal the approved release record ----
+if (built.length !== release.artifact.bytes || digest !== release.artifact.sha256) {
+  die(2, `built artifact does not match the release record (${RELEASE_REC}).\n  built:    ${built.length} bytes, sha256 ${digest}\n  release:  ${release.artifact.bytes} bytes, sha256 ${release.artifact.sha256}\n  (original Phase 5 baseline, ${BASELINE_REC}: ${baseline.bytes} bytes, sha256 ${baseline.sha256})`);
+}
+summary.release = release.name;
+summary.matchesBaseline = built.length === baseline.bytes && digest === baseline.sha256;
 
 // ---- write or check ----
 const outPath = path.join(root, manifest.output);

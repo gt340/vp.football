@@ -1,0 +1,28 @@
+name: R1-0 release gate
+on:
+  push:
+    branches: [feature/r1-0-release-record]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: r1-0-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Verify committed artifact matches release record
+        run: npm run build:check
+      - name: Run full test suite
+        run: npm test

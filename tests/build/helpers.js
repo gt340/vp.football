@@ -9,7 +9,7 @@ const REPO = path.resolve(__dirname, '..', '..');
 // Copies exactly what the build needs into a fresh temp directory.
 function copyRepo() {
   const dst = fs.mkdtempSync(path.join(os.tmpdir(), 'vpf-'));
-  for (const p of ['src', 'scripts', 'tests/fixtures', 'football-game.html', 'package.json']) {
+  for (const p of ['src', 'scripts', 'tests/fixtures', 'release', 'football-game.html', 'package.json']) {
     fs.mkdirSync(path.dirname(path.join(dst, p)), { recursive: true });
     fs.cpSync(path.join(REPO, p), path.join(dst, p), { recursive: true });
   }
