@@ -39,8 +39,8 @@ test('the original baseline record is immutable: pinned byte for byte, with the 
   assert.equal(raw.length, BASELINE_RECORD_FILE_BYTES);
   assert.equal(sha(raw), BASELINE_RECORD_FILE_SHA256);
   const b = JSON.parse(raw.toString('utf8'));
-  assert.equal(b.sha256, APPROVED_SHA);
-  assert.equal(b.bytes, APPROVED_BYTES);
+  assert.equal(b.sha256, '84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d');
+  assert.equal(b.bytes, 186426);
 });
 
 test('the release record references the baseline record and agrees with it', () => {
