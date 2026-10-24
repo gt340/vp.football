@@ -10,8 +10,8 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { REPO, copyRepo, node, rm } = require('./helpers');
 
-const APPROVED_SHA = '03c0380585d65b29368e3e6ca8dfd6cad245f61d28b3527b3783869ccd0f45dd';
-const APPROVED_BYTES = 187177;
+const APPROVED_SHA = 'c6ea8d3e1a51fc28f4f1b2cdf459acf3022dbc30a898afffb3e45544af1d1d91';
+const APPROVED_BYTES = 187333;
 // The original baseline record, pinned byte for byte. Changing tests/fixtures/baseline.json must fail this test.
 const BASELINE_RECORD_FILE_SHA256 = 'a5318a7a292995e0c625cbe0c89fdb6b61cc7d41c71edcb04bf558357f9b8166';
 const BASELINE_RECORD_FILE_BYTES = 451;

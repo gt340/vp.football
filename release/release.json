@@ -5,8 +5,8 @@
   "description": "R1-1 release: centralized screen navigation. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
   "artifact": {
     "path": "football-game.html",
-    "sha256": "03c0380585d65b29368e3e6ca8dfd6cad245f61d28b3527b3783869ccd0f45dd",
-    "bytes": 187177
+    "sha256": "c6ea8d3e1a51fc28f4f1b2cdf459acf3022dbc30a898afffb3e45544af1d1d91",
+    "bytes": 187333
   },
   "derivedFromBaseline": {
     "record": "tests/fixtures/baseline.json",

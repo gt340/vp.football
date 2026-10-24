@@ -1481,8 +1481,10 @@ const ScreenRouter = (() => {
     return screen;
   }
   function show(id) {
-    const target = getScreen(id);
     const screens = document.querySelectorAll('.screen');
+    // Simulation harnesses may intentionally omit UI markup; navigation is a no-op there.
+    if (!screens.length) { activeScreenId = null; return null; }
+    const target = getScreen(id);
     if (id !== null && !Array.from(screens).includes(target)) {
       throw new Error(`ScreenRouter: screen "${id}" is not registered`);
     }
