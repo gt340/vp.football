@@ -8,7 +8,7 @@ function click(g, id) {
 }
 
 function prepareCustomMatch(g, { teamSize = 7, duration = 300 } = {}) {
-  assert.equal(click(g, 'btn-custom-match'), undefined);
+  assert.equal(click(g, 'btn-custom-match'), null);
   assert.equal(g.run('ScreenRouter.current()'), 'custom-match-screen');
   g.run(`state.teamSize = ${teamSize}; state.duration = ${duration};`);
   assert.equal(click(g, 'btn-to-tactics'), true);
