@@ -5,8 +5,8 @@
   "description": "R1-2 release: home-screen Quick Match and Custom Match entry points. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
   "artifact": {
     "path": "football-game.html",
-    "sha256": "5ee4d62209316f7dc4e0fee43e5540e672685849c2d2d29e2751a7968874c1f7",
-    "bytes": 189378
+    "sha256": "e88be9ff6963f1a6846522da56bf8623f3c9d4d447cb9bdc9c3bca042725471e",
+    "bytes": 189377
   },
   "derivedFromBaseline": {
     "record": "tests/fixtures/baseline.json",
