@@ -62,7 +62,7 @@ function harness({ includeScreens = true } = {}) {
   };
   for (const file of ['screen-router.js', 'setup-navigation.js', 'match-entry-points.js']) {
     const source = fs.readFileSync(path.join(__dirname, '../../src/ui', file), 'utf8');
-    vm.runInNewContext(source, context, { filename: file });
+    vm.runInNewContext(file === 'screen-router.js' ? source + '\nthis.__router = ScreenRouter;' : source, context, { filename: file });
   }
   return { buttons, screens, gameState, context };
 }
@@ -126,8 +126,8 @@ test('navigation handlers reject actions when game state is not MENU or SETTINGS
 
 test('router no-ops safely when the simulation harness has no screen markup', () => {
   const h = harness({ includeScreens: false });
-  assert.equal(h.context.ScreenRouter.current(), null);
-  assert.equal(h.context.ScreenRouter.show('custom-match-screen'), null);
+  assert.equal(h.context.__router.current(), null);
+  assert.equal(h.context.__router.show('custom-match-screen'), null);
   assert.equal(h.context.ScreenRouter.current(), null);
 });
 
