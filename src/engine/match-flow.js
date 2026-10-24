@@ -1,8 +1,7 @@
 /* ---------- MATCH ENGINE FOUNDATION (Step 8) ---------- */
 function startMatch() {
   AudioManager.ensure();
-  document.getElementById('players-screen').classList.add('hidden');
-  document.getElementById('result-screen').classList.add('hidden');
+  ScreenRouter.show(null);
   document.getElementById('hud').classList.remove('hidden');
   document.getElementById('controls').classList.add('active');
   document.getElementById('selected-info').classList.remove('hidden');

@@ -55,8 +55,8 @@ function endMatch() {
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('selected-info').classList.add('hidden');
   document.getElementById('commentary').classList.remove('show');
+  ScreenRouter.show('result-screen');
   const rs = document.getElementById('result-screen');
-  rs.classList.remove('hidden');
   let title, msg;
   if (state.scoreHome > state.scoreAway) {
     title = 'Victory!';

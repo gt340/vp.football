@@ -212,14 +212,12 @@ EventBus.on(GameEvents.PLAYER_SUBSTITUTED_ON, () => { if (state.tacticalPanelOpe
 document.getElementById('btn-to-players').onclick = () => {
   AudioManager.ensure();
   if (!Game.state.transition(GameStates.SQUAD_SELECTION)) return;
-  document.getElementById('menu-screen').classList.add('hidden');
-  document.getElementById('players-screen').classList.remove('hidden');
+  ScreenRouter.show('players-screen');
   buildPlayerGrid();
 };
 document.getElementById('btn-back-menu').onclick = () => {
   Game.state.transition(GameStates.MENU);
-  document.getElementById('players-screen').classList.add('hidden');
-  document.getElementById('menu-screen').classList.remove('hidden');
+  ScreenRouter.show('menu-screen');
 };
 document.getElementById('btn-kickoff').onclick = () => {
   const hasGK = state.selectedPlayerIds.some(id => ALL_PLAYERS.find(x => x.id === id)?.pos === 'GK');
@@ -229,13 +227,11 @@ document.getElementById('btn-kickoff').onclick = () => {
 };
 document.getElementById('btn-replay').onclick = () => {
   if (!Game.state.transition(GameStates.PRE_MATCH)) return;
-  document.getElementById('result-screen').classList.add('hidden');
   startMatch();
 };
 document.getElementById('btn-menu').onclick = () => {
   Game.state.transition(GameStates.MENU);
-  document.getElementById('result-screen').classList.add('hidden');
-  document.getElementById('menu-screen').classList.remove('hidden');
+  ScreenRouter.show('menu-screen');
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('controls').classList.remove('active');
   document.getElementById('selected-info').classList.add('hidden');
