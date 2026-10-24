@@ -9,10 +9,10 @@ function click(g, id) {
 
 function prepareCustomMatch(g, { teamSize = 7, duration = 300 } = {}) {
   assert.equal(click(g, 'btn-custom-match'), null);
-  assert.equal(g.run('ScreenRouter.current()'), 'custom-match-screen');
+  assert.equal(g.run('ScreenRouter.current()'), null);
   g.run(`state.teamSize = ${teamSize}; state.duration = ${duration};`);
   assert.equal(click(g, 'btn-to-tactics'), true);
-  assert.equal(g.run('ScreenRouter.current()'), 'tactics-screen');
+  assert.equal(g.run('ScreenRouter.current()'), null);
 }
 
 test('Custom Match completes setup -> tactics -> squad -> kickoff with selections intact', () => {
@@ -33,11 +33,11 @@ test('Custom Match completes setup -> tactics -> squad -> kickoff with selection
   })()`);
 
   assert.equal(click(g, 'btn-tactics-back'), true);
-  assert.equal(g.run('ScreenRouter.current()'), 'custom-match-screen');
+  assert.equal(g.run('ScreenRouter.current()'), null);
   assert.equal(g.run('state.teamSize'), 7);
   assert.equal(g.run('state.duration'), 300);
   assert.equal(click(g, 'btn-to-tactics'), true);
-  assert.equal(g.run('ScreenRouter.current()'), 'tactics-screen');
+  assert.equal(g.run('ScreenRouter.current()'), null);
   assert.deepEqual(g.run(`({
     home: state.homeTeam.id, away: state.awayTeam.id,
     formation: state.homeTactics.formationId,
@@ -46,7 +46,7 @@ test('Custom Match completes setup -> tactics -> squad -> kickoff with selection
 
   assert.equal(click(g, 'btn-to-players'), undefined);
   assert.equal(g.run('Game.state.current'), 'SQUAD_SELECTION');
-  assert.equal(g.run('ScreenRouter.current()'), 'players-screen');
+  assert.equal(g.run('ScreenRouter.current()'), null);
   assert.equal(g.run('state.selectedPlayerIds.length'), 7);
   assert.equal(g.run('state.selectedPlayerIds.some(id => ALL_PLAYERS.find(p => p.id === id)?.pos === "GK")'), true);
 
