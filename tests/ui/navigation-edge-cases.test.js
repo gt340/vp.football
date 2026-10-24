@@ -136,5 +136,5 @@ test('unknown screen targets fail closed without hiding the currently active scr
   const h = harness();
   assert.throws(() => h.context.__router.show('missing-screen'), /unknown screen/);
   assert.deepEqual(visibleScreen(h), ['menu-screen']);
-  assert.equal(h.context.ScreenRouter.current(), 'menu-screen');
+  assert.equal(h.context.__router.current(), 'menu-screen');
 });
