@@ -225,12 +225,33 @@
     color: #fff; border-radius: 8px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer;
     pointer-events: auto;
   }
+
+/* R1-3: compact navigation controls for the split setup flow. */
+.match-entry-actions, .screen-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.match-entry-actions .btn, .screen-actions .btn { margin-top: 0.35rem; }
+#settings-screen #sound-toggle {
+  position: static;
+  margin: 0 0 12px;
+  padding: 11px 24px;
+  font-size: 1rem;
+}
+@media (max-height: 520px) {
+  .screen { justify-content: flex-start; }
+  .panel { padding: 0.65rem 0.8rem; margin-bottom: 0.5rem; }
+  .team-select { max-height: 120px; }
+  .player-grid { max-height: 120px; }
+}
 </style>
 </head>
 <body>
 <div id="game-wrap">
   <canvas id="game"></canvas>
-  <button id="sound-toggle">🔊 Sound</button>
 
   <div id="hud" class="hidden">
     <div class="scoreboard">
@@ -315,13 +336,14 @@
     <div class="match-entry-actions">
       <button class="btn" id="btn-quick-match">Quick Match</button>
       <button class="btn btn-secondary" id="btn-custom-match">Custom Match</button>
+      <button class="btn btn-secondary" id="btn-settings">Settings</button>
     </div>
     <p class="subtitle">Quick Match starts immediately with the default squad.</p>
   </div>
 
   <div id="custom-match-screen" class="screen hidden">
-    <h1>Custom Match</h1>
-    <p class="subtitle">Choose clubs, match length, team size and tactics.</p>
+    <h1>Match Setup</h1>
+    <p class="subtitle">Choose your clubs, match length and team size.</p>
     <div class="panel">
       <h2>Your Club</h2>
       <div class="team-select" id="team-select"></div>
@@ -346,6 +368,13 @@
         <div class="opt-chip" data-val="11">11v11</div>
       </div>
     </div>
+    <button class="btn" id="btn-to-tactics">Continue to Tactics</button>
+    <button class="btn btn-secondary" id="btn-custom-back">Main Menu</button>
+  </div>
+
+  <div id="tactics-screen" class="screen hidden">
+    <h1>Tactics</h1>
+    <p class="subtitle">Choose your formation and playing style.</p>
     <div class="panel">
       <h2>Your Tactics <span style="color:#8b9bb4;font-weight:400">(11v11 uses the formation shape; mentality/style apply to any size)</span></h2>
       <div class="match-opts" id="formation-opts">
@@ -367,8 +396,17 @@
         <div class="opt-chip" data-val="LOW_BLOCK">Low Block</div>
       </div>
     </div>
-    <button class="btn" id="btn-to-players">Choose Players</button>
-    <button class="btn btn-secondary" id="btn-custom-back">Main Menu</button>
+    <div class="screen-actions">
+      <button class="btn btn-secondary" id="btn-tactics-back">Back to Setup</button>
+      <button class="btn" id="btn-to-players">Choose Players</button>
+    </div>
+  </div>
+
+  <div id="settings-screen" class="screen hidden">
+    <h1>Settings</h1>
+    <p class="subtitle">Audio</p>
+    <button id="sound-toggle" aria-label="Toggle sound">🔊 Sound</button>
+    <button class="btn btn-secondary" id="btn-settings-back">Main Menu</button>
   </div>
 
   <div id="players-screen" class="screen hidden">
@@ -1540,6 +1578,33 @@ function startQuickMatch() {
 document.getElementById('btn-quick-match').onclick = startQuickMatch;
 document.getElementById('btn-custom-match').onclick = () => ScreenRouter.show('custom-match-screen');
 document.getElementById('btn-custom-back').onclick = () => ScreenRouter.show('menu-screen');
+/* ---------- SETUP AND SETTINGS NAVIGATION (R1-3) ---------- */
+document.getElementById('btn-to-tactics').onclick = () => {
+  if (!Game.state.is(GameStates.MENU)) return false;
+  ScreenRouter.show('tactics-screen');
+  return true;
+};
+
+document.getElementById('btn-tactics-back').onclick = () => {
+  if (!Game.state.is(GameStates.MENU)) return false;
+  ScreenRouter.show('custom-match-screen');
+  return true;
+};
+
+document.getElementById('btn-settings').onclick = () => {
+  if (!Game.state.is(GameStates.MENU)) return false;
+  if (!Game.state.transition(GameStates.SETTINGS)) return false;
+  ScreenRouter.show('settings-screen');
+  return true;
+};
+
+document.getElementById('btn-settings-back').onclick = () => {
+  if (!Game.state.is(GameStates.SETTINGS)) return false;
+  if (!Game.state.transition(GameStates.MENU)) return false;
+  ScreenRouter.show('menu-screen');
+  return true;
+};
+
 /* ---------- MENU / SQUAD SELECTION UI ---------- */
 function buildTeamSelect(elId, isHome) {
   const el = document.getElementById(elId);

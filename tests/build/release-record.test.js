@@ -10,8 +10,8 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { REPO, copyRepo, node, rm } = require('./helpers');
 
-const APPROVED_SHA = 'e88be9ff6963f1a6846522da56bf8623f3c9d4d447cb9bdc9c3bca042725471e';
-const APPROVED_BYTES = 189377;
+const APPROVED_SHA = '6d4094b281b5bd11507638750a49f477585a393f674896e6dbfa4d34abd9f4aa';
+const APPROVED_BYTES = 191519;
 // The original baseline record, pinned byte for byte. Changing tests/fixtures/baseline.json must fail this test.
 const BASELINE_RECORD_FILE_SHA256 = 'a5318a7a292995e0c625cbe0c89fdb6b61cc7d41c71edcb04bf558357f9b8166';
 const BASELINE_RECORD_FILE_BYTES = 451;
@@ -28,7 +28,7 @@ test('release record identifies the current R1-2 artifact (sha256, bytes, name, 
   const r = readJson(REPO, 'release/release.json');
   assert.equal(r.recordVersion, 1);
   assert.equal(r.kind, 'release');
-  assert.equal(r.name, 'r1-2-match-entry-points');
+  assert.equal(r.name, 'r1-3-setup-settings');
   assert.equal(r.artifact.path, 'football-game.html');
   assert.equal(r.artifact.sha256, APPROVED_SHA);
   assert.equal(r.artifact.bytes, APPROVED_BYTES);
@@ -62,7 +62,7 @@ test('build:check verifies against the release record and reports which records 
   const r = build(tmp);
   assert.equal(r.code, 0, r.out);
   const summary = JSON.parse(r.out.trim().split('\n').pop());
-  assert.equal(summary.release, 'r1-2-match-entry-points');
+  assert.equal(summary.release, 'r1-3-setup-settings');
   assert.equal(summary.matchesBaseline, false);
   assert.equal(summary.sha256, APPROVED_SHA);
   assert.equal(summary.bytes, APPROVED_BYTES);

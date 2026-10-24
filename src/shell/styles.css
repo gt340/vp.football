@@ -218,3 +218,25 @@
     color: #fff; border-radius: 8px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer;
     pointer-events: auto;
   }
+
+/* R1-3: compact navigation controls for the split setup flow. */
+.match-entry-actions, .screen-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.match-entry-actions .btn, .screen-actions .btn { margin-top: 0.35rem; }
+#settings-screen #sound-toggle {
+  position: static;
+  margin: 0 0 12px;
+  padding: 11px 24px;
+  font-size: 1rem;
+}
+@media (max-height: 520px) {
+  .screen { justify-content: flex-start; }
+  .panel { padding: 0.65rem 0.8rem; margin-bottom: 0.5rem; }
+  .team-select { max-height: 120px; }
+  .player-grid { max-height: 120px; }
+}
