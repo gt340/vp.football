@@ -5,8 +5,8 @@
   "description": "R1-3 release: split Custom Match setup into Match Setup and Tactics screens and add Settings for the existing sound toggle. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
   "artifact": {
     "path": "football-game.html",
-    "sha256": "6d4094b281b5bd11507638750a49f477585a393f674896e6dbfa4d34abd9f4aa",
-    "bytes": 191519
+    "sha256": "99df6469cbcd6762a74132fa3006a46b145d812479d7d1f9e9bb368567ca534f",
+    "bytes": 191518
   },
   "derivedFromBaseline": {
     "record": "tests/fixtures/baseline.json",
