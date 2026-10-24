@@ -1,12 +1,12 @@
 {
   "recordVersion": 1,
   "kind": "release",
-  "name": "phase5-approved",
-  "description": "Release record for the approved Phase 5 artifact served in production. The build verifies its output against this record. tests/fixtures/baseline.json is the separate, immutable record of the original Phase 5 baseline.",
+  "name": "r1-1-screen-router",
+  "description": "R1-1 release: centralized screen navigation. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
   "artifact": {
     "path": "football-game.html",
-    "sha256": "84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d",
-    "bytes": 186426
+    "sha256": "03c0380585d65b29368e3e6ca8dfd6cad245f61d28b3527b3783869ccd0f45dd",
+    "bytes": 187177
   },
   "derivedFromBaseline": {
     "record": "tests/fixtures/baseline.json",

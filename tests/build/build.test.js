@@ -8,27 +8,28 @@ const { REPO, copyRepo, node, rm } = require('./helpers');
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const baseline = JSON.parse(fs.readFileSync(path.join(REPO, 'tests/fixtures/baseline.json'), 'utf8'));
+const release = JSON.parse(fs.readFileSync(path.join(REPO, 'release/release.json'), 'utf8'));
 
 test('recorded baseline fixture has the Phase 5 hash and size', () => {
   assert.equal(baseline.sha256, '84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d');
   assert.equal(baseline.bytes, 186426);
 });
 
-test('committed football-game.html IS the baseline (hash + bytes)', () => {
+test('committed football-game.html matches the current release record (baseline remains separately pinned)', () => {
   const b = fs.readFileSync(path.join(REPO, 'football-game.html'));
-  assert.equal(b.length, baseline.bytes);
-  assert.equal(sha(b), baseline.sha256);
+  assert.equal(b.length, release.artifact.bytes);
+  assert.equal(sha(b), release.artifact.sha256);
 });
 
-test('GATE: build from src slices reproduces the baseline exactly, and --check finds no drift', () => {
+test('GATE: build from src slices reproduces the current release artifact, and --check finds no drift', () => {
   const tmp = copyRepo();
   try {
     fs.rmSync(path.join(tmp, 'football-game.html'));
     const r = node('scripts/build.js', [], tmp);
     assert.equal(r.code, 0, r.out);
     const built = fs.readFileSync(path.join(tmp, 'football-game.html'));
-    assert.equal(built.length, baseline.bytes);
-    assert.equal(sha(built), baseline.sha256);
+    assert.equal(built.length, release.artifact.bytes);
+    assert.equal(sha(built), release.artifact.sha256);
     const c = node('scripts/build.js', ['--check'], tmp);
     assert.equal(c.code, 0, c.out);
   } finally { rm(tmp); }
@@ -40,7 +41,7 @@ test('build is deterministic: repeated builds in different directories give iden
     for (const d of [a, b]) { fs.rmSync(path.join(d, 'football-game.html')); assert.equal(node('scripts/build.js', [], d).code, 0); }
     assert.ok(fs.readFileSync(path.join(a, 'football-game.html')).equals(fs.readFileSync(path.join(b, 'football-game.html'))));
     assert.equal(node('scripts/build.js', [], a).code, 0); // rebuilding over its own output is stable
-    assert.equal(sha(fs.readFileSync(path.join(a, 'football-game.html'))), baseline.sha256);
+    assert.equal(sha(fs.readFileSync(path.join(a, 'football-game.html'))), release.artifact.sha256);
   } finally { rm(a); rm(b); }
 });
 
@@ -114,15 +115,14 @@ test('split script refuses an input that is not the baseline and writes nothing'
   } finally { rm(tmp); }
 });
 
-test('split script reproduces the committed slices from the baseline (provenance)', () => {
+test('baseline splitter refuses the evolved release artifact and leaves no partial source tree', () => {
   const tmp = copyRepo();
   try {
     fs.rmSync(path.join(tmp, 'src'), { recursive: true });
     const r = node('scripts/split-baseline.js', [tmp], tmp);
-    assert.equal(r.code, 0, r.out);
-    const m = JSON.parse(fs.readFileSync(path.join(REPO, 'src/manifest.json'), 'utf8'));
-    for (const f of m.files) assert.ok(fs.readFileSync(path.join(tmp, f)).equals(fs.readFileSync(path.join(REPO, f))), f);
-    assert.ok(fs.readFileSync(path.join(tmp, 'src/manifest.json')).equals(fs.readFileSync(path.join(REPO, 'src/manifest.json'))));
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /SPLIT FAILED/);
+    assert.equal(fs.existsSync(path.join(tmp, 'src')), false);
   } finally { rm(tmp); }
 });
 

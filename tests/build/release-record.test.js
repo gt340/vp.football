@@ -10,8 +10,8 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { REPO, copyRepo, node, rm } = require('./helpers');
 
-const APPROVED_SHA = '84b1d74343df1b8093bfdd1797d90a691e39043627bb1f1483d3f1a8deef8a1d';
-const APPROVED_BYTES = 186426;
+const APPROVED_SHA = '03c0380585d65b29368e3e6ca8dfd6cad245f61d28b3527b3783869ccd0f45dd';
+const APPROVED_BYTES = 187177;
 // The original baseline record, pinned byte for byte. Changing tests/fixtures/baseline.json must fail this test.
 const BASELINE_RECORD_FILE_SHA256 = 'a5318a7a292995e0c625cbe0c89fdb6b61cc7d41c71edcb04bf558357f9b8166';
 const BASELINE_RECORD_FILE_BYTES = 451;
@@ -24,11 +24,11 @@ const flipHex = (h) => (h[0] === '0' ? '1' : '0') + h.slice(1);
 function withCopy(fn) { const tmp = copyRepo(); try { return fn(tmp); } finally { rm(tmp); } }
 function build(tmp, args = ['--check']) { return node('scripts/build.js', args, tmp); }
 
-test('release record identifies the approved Phase 5 artifact (sha256, bytes, name, kind)', () => {
+test('release record identifies the current R1-1 artifact (sha256, bytes, name, kind)', () => {
   const r = readJson(REPO, 'release/release.json');
   assert.equal(r.recordVersion, 1);
   assert.equal(r.kind, 'release');
-  assert.equal(r.name, 'phase5-approved');
+  assert.equal(r.name, 'r1-1-screen-router');
   assert.equal(r.artifact.path, 'football-game.html');
   assert.equal(r.artifact.sha256, APPROVED_SHA);
   assert.equal(r.artifact.bytes, APPROVED_BYTES);
@@ -62,8 +62,8 @@ test('build:check verifies against the release record and reports which records 
   const r = build(tmp);
   assert.equal(r.code, 0, r.out);
   const summary = JSON.parse(r.out.trim().split('\n').pop());
-  assert.equal(summary.release, 'phase5-approved');
-  assert.equal(summary.matchesBaseline, true);
+  assert.equal(summary.release, 'r1-1-screen-router');
+  assert.equal(summary.matchesBaseline, false);
   assert.equal(summary.sha256, APPROVED_SHA);
   assert.equal(summary.bytes, APPROVED_BYTES);
 }));
