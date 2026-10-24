@@ -35,7 +35,8 @@ function harness({ includeScreens = true } = {}) {
     'btn-to-tactics', 'btn-tactics-back', 'btn-settings', 'btn-settings-back',
   ];
   const buttons = new Map(buttonIds.map((id) => [id, { onclick: null }]));
-  const byId = new Map([...screens, ...buttons].map((el) => [el.id, el]));
+  const byId = new Map(screens.map((screen) => [screen.id, screen]));
+  for (const [id, button] of buttons) byId.set(id, button);
   const transitions = { MENU: ['SETTINGS'], SETTINGS: ['MENU'] };
   const gameState = {
     current: 'MENU',
@@ -128,12 +129,12 @@ test('router no-ops safely when the simulation harness has no screen markup', ()
   const h = harness({ includeScreens: false });
   assert.equal(h.context.__router.current(), null);
   assert.equal(h.context.__router.show('custom-match-screen'), null);
-  assert.equal(h.context.ScreenRouter.current(), null);
+  assert.equal(h.context.__router.current(), null);
 });
 
 test('unknown screen targets fail closed without hiding the currently active screen', () => {
   const h = harness();
-  assert.throws(() => h.context.ScreenRouter.show('missing-screen'), /unknown screen/);
+  assert.throws(() => h.context.__router.show('missing-screen'), /unknown screen/);
   assert.deepEqual(visibleScreen(h), ['menu-screen']);
   assert.equal(h.context.ScreenRouter.current(), 'menu-screen');
 });
