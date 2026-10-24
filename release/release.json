@@ -1,12 +1,12 @@
 {
   "recordVersion": 1,
   "kind": "release",
-  "name": "r1-1-screen-router",
-  "description": "R1-1 release: centralized screen navigation. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
+  "name": "r1-2-match-entry-points",
+  "description": "R1-2 release: home-screen Quick Match and Custom Match entry points. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
   "artifact": {
     "path": "football-game.html",
-    "sha256": "c6ea8d3e1a51fc28f4f1b2cdf459acf3022dbc30a898afffb3e45544af1d1d91",
-    "bytes": 187333
+    "sha256": "5ee4d62209316f7dc4e0fee43e5540e672685849c2d2d29e2751a7968874c1f7",
+    "bytes": 189378
   },
   "derivedFromBaseline": {
     "record": "tests/fixtures/baseline.json",

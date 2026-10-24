@@ -12,6 +12,7 @@
     "src/input/input-manager.js",
     "src/engine/audio-and-commentary.js",
     "src/ui/screen-router.js",
+    "src/ui/match-entry-points.js",
     "src/ui/menu-and-panels.js",
     "src/input/touch-controls.js",
     "src/rendering/camera.js",
