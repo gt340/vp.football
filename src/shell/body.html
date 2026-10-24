@@ -85,6 +85,16 @@
   <div id="menu-screen" class="screen">
     <h1>eToy Football</h1>
     <p class="subtitle">Real clubs · Commentary · Sounds · eFootball controls</p>
+    <div class="match-entry-actions">
+      <button class="btn" id="btn-quick-match">Quick Match</button>
+      <button class="btn btn-secondary" id="btn-custom-match">Custom Match</button>
+    </div>
+    <p class="subtitle">Quick Match starts immediately with the default squad.</p>
+  </div>
+
+  <div id="custom-match-screen" class="screen hidden">
+    <h1>Custom Match</h1>
+    <p class="subtitle">Choose clubs, match length, team size and tactics.</p>
     <div class="panel">
       <h2>Your Club</h2>
       <div class="team-select" id="team-select"></div>
@@ -130,7 +140,8 @@
         <div class="opt-chip" data-val="LOW_BLOCK">Low Block</div>
       </div>
     </div>
-    <button class="btn" id="btn-to-players">Next: Choose Players</button>
+    <button class="btn" id="btn-to-players">Choose Players</button>
+    <button class="btn btn-secondary" id="btn-custom-back">Main Menu</button>
   </div>
 
   <div id="players-screen" class="screen hidden">
