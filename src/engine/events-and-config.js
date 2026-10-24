@@ -159,7 +159,7 @@ const PLAYER_CONFIG = {
   decelFactor: 0.78,
   moveThreshold: 0.08,
   shootRange: 24 * WORLD_RADIAL_SCALE,
-  passRange: 26 * WORLD_RADIAL_SCALE,
+  passRange: 34 * WORLD_RADIAL_SCALE,
   shootCooldown: 14,
   passCooldown: 10,
   tackleCooldown: 20,
@@ -217,7 +217,7 @@ const CONTROL_CONFIG = {
    attribution, and keeps doing exactly that, unchanged). Values scale
    with WORLD_RADIAL_SCALE like every other Phase 4/5 spatial config. */
 const BALL_CONTROL_CONFIG = {
-  possessionRadius: 20 * WORLD_RADIAL_SCALE,
+  possessionRadius: 27 * WORLD_RADIAL_SCALE,
   releaseDistance: 34 * WORLD_RADIAL_SCALE,
   carryingSpeedCap: 3 * WORLD_RADIAL_SCALE,
   dribbleLeadDistance: 11 * WORLD_RADIAL_SCALE,

@@ -1,12 +1,12 @@
 {
   "recordVersion": 1,
   "kind": "release",
-  "name": "r1-3-setup-settings",
-  "description": "R1-3 release: split Custom Match setup into Match Setup and Tactics screens and add Settings for the existing sound toggle. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
+  "name": "r1-6-mobile-gameplay-controls",
+  "description": "R1-6 feature-branch build: field-drag movement, tracked touch input, more forgiving ball pickup and passing ranges, and larger mobile tactics touch targets. Not merged or released to production. Derived from the immutable Phase 5 baseline.",
   "artifact": {
     "path": "football-game.html",
-    "sha256": "99df6469cbcd6762a74132fa3006a46b145d812479d7d1f9e9bb368567ca534f",
-    "bytes": 191518
+    "sha256": "59c7c22a37e79a9b7b48abe8a9305663b20f61c691402c4610711c8fbee334b5",
+    "bytes": 194859
   },
   "derivedFromBaseline": {
     "record": "tests/fixtures/baseline.json",

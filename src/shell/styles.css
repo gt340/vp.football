@@ -62,9 +62,10 @@
 
   #match-menu-toggle {
     position: absolute; top: 100px; left: 10px;
-    z-index: 50; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2);
-    color: #fff; border-radius: 8px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer;
-    pointer-events: auto; display: none;
+    z-index: 50; background: rgba(0,0,0,0.78); border: 1px solid rgba(255,255,255,0.28);
+    color: #fff; border-radius: 10px; padding: 9px 12px; min-height: 42px;
+    font-size: 0.8rem; font-weight: 700; cursor: pointer;
+    pointer-events: auto; display: none; touch-action: manipulation;
   }
   #match-menu-toggle.active { display: block; }
   #match-panel {
@@ -76,14 +77,15 @@
   #match-panel.hidden { display: none; }
   #match-panel-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.1); }
   .mp-tab {
-    flex: 1; text-align: center; padding: 8px 4px; font-size: 0.75rem; font-weight: 700;
-    color: #8b9bb4; cursor: pointer;
+    flex: 1; text-align: center; padding: 12px 6px; min-height: 44px; font-size: 0.8rem; font-weight: 700;
+    color: #8b9bb4; cursor: pointer; touch-action: manipulation;
   }
   .mp-tab.active { color: #00d4aa; border-bottom: 2px solid #00d4aa; }
   #match-panel-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
   #match-panel-close {
-    position: absolute; top: 6px; right: 8px; color: #8b9bb4; font-size: 1.1rem;
-    cursor: pointer; z-index: 1; pointer-events: auto;
+    position: absolute; top: 2px; right: 4px; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center; color: #e8eef5;
+    font-size: 1.1rem; cursor: pointer; z-index: 1; pointer-events: auto; touch-action: manipulation;
   }
   .mp-section.hidden { display: none; }
   .mp-row {
@@ -182,8 +184,9 @@
   .team-card .name { font-weight: 700; font-size: 0.78rem; text-align: left; }
   .match-opts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
   .opt-chip {
-    padding: 7px 12px; border-radius: 18px; background: rgba(0,0,0,0.35);
-    border: 2px solid transparent; cursor: pointer; font-size: 0.78rem; font-weight: 600;
+    padding: 10px 13px; min-height: 42px; border-radius: 18px; background: rgba(0,0,0,0.35);
+    border: 2px solid transparent; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation;
   }
   .opt-chip.selected { border-color: #00d4aa; background: rgba(0,212,170,0.15); }
   .player-grid {
