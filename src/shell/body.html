@@ -3,7 +3,6 @@
 <body>
 <div id="game-wrap">
   <canvas id="game"></canvas>
-  <button id="sound-toggle">🔊 Sound</button>
 
   <div id="hud" class="hidden">
     <div class="scoreboard">
@@ -88,13 +87,14 @@
     <div class="match-entry-actions">
       <button class="btn" id="btn-quick-match">Quick Match</button>
       <button class="btn btn-secondary" id="btn-custom-match">Custom Match</button>
+      <button class="btn btn-secondary" id="btn-settings">Settings</button>
     </div>
     <p class="subtitle">Quick Match starts immediately with the default squad.</p>
   </div>
 
   <div id="custom-match-screen" class="screen hidden">
-    <h1>Custom Match</h1>
-    <p class="subtitle">Choose clubs, match length, team size and tactics.</p>
+    <h1>Match Setup</h1>
+    <p class="subtitle">Choose your clubs, match length and team size.</p>
     <div class="panel">
       <h2>Your Club</h2>
       <div class="team-select" id="team-select"></div>
@@ -119,6 +119,13 @@
         <div class="opt-chip" data-val="11">11v11</div>
       </div>
     </div>
+    <button class="btn" id="btn-to-tactics">Continue to Tactics</button>
+    <button class="btn btn-secondary" id="btn-custom-back">Main Menu</button>
+  </div>
+
+  <div id="tactics-screen" class="screen hidden">
+    <h1>Tactics</h1>
+    <p class="subtitle">Choose your formation and playing style.</p>
     <div class="panel">
       <h2>Your Tactics <span style="color:#8b9bb4;font-weight:400">(11v11 uses the formation shape; mentality/style apply to any size)</span></h2>
       <div class="match-opts" id="formation-opts">
@@ -140,8 +147,17 @@
         <div class="opt-chip" data-val="LOW_BLOCK">Low Block</div>
       </div>
     </div>
-    <button class="btn" id="btn-to-players">Choose Players</button>
-    <button class="btn btn-secondary" id="btn-custom-back">Main Menu</button>
+    <div class="screen-actions">
+      <button class="btn btn-secondary" id="btn-tactics-back">Back to Setup</button>
+      <button class="btn" id="btn-to-players">Choose Players</button>
+    </div>
+  </div>
+
+  <div id="settings-screen" class="screen hidden">
+    <h1>Settings</h1>
+    <p class="subtitle">Audio</p>
+    <button id="sound-toggle" aria-label="Toggle sound">🔊 Sound</button>
+    <button class="btn btn-secondary" id="btn-settings-back">Main Menu</button>
   </div>
 
   <div id="players-screen" class="screen hidden">

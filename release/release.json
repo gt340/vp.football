@@ -1,12 +1,12 @@
 {
   "recordVersion": 1,
   "kind": "release",
-  "name": "r1-2-match-entry-points",
-  "description": "R1-2 release: home-screen Quick Match and Custom Match entry points. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
+  "name": "r1-3-setup-settings",
+  "description": "R1-3 release: split Custom Match setup into Match Setup and Tactics screens and add Settings for the existing sound toggle. Derived from the immutable Phase 5 baseline; see tests/fixtures/baseline.json.",
   "artifact": {
     "path": "football-game.html",
-    "sha256": "e88be9ff6963f1a6846522da56bf8623f3c9d4d447cb9bdc9c3bca042725471e",
-    "bytes": 189377
+    "sha256": "99df6469cbcd6762a74132fa3006a46b145d812479d7d1f9e9bb368567ca534f",
+    "bytes": 191518
   },
   "derivedFromBaseline": {
     "record": "tests/fixtures/baseline.json",

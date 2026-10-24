@@ -7,7 +7,7 @@ const vm = require('node:vm');
 
 function harness() {
   const attributes = new Map();
-  const screens = ['menu-screen', 'players-screen', 'result-screen', 'custom-match-screen'].map((id) => {
+  const screens = ['menu-screen', 'players-screen', 'result-screen', 'custom-match-screen', 'tactics-screen', 'settings-screen'].map((id) => {
     const classes = new Set(['screen']);
     if (id !== 'menu-screen') classes.add('hidden');
     return {
@@ -76,5 +76,21 @@ test('registers and navigates to the custom match screen', () => {
   assert.equal(router.show('custom-match-screen'), 'custom-match-screen');
   assert.equal(screens[3].hasClass('hidden'), false);
   assert.equal(screens[3].attribute('aria-hidden'), 'false');
+  assert.equal(screens[0].hasClass('hidden'), true);
+});
+
+test('registers and navigates to the tactics screen', () => {
+  const { router, screens } = harness();
+  assert.equal(router.show('tactics-screen'), 'tactics-screen');
+  assert.equal(screens[4].hasClass('hidden'), false);
+  assert.equal(screens[4].attribute('aria-hidden'), 'false');
+  assert.equal(screens[3].hasClass('hidden'), true);
+});
+
+test('registers and navigates to the settings screen', () => {
+  const { router, screens } = harness();
+  assert.equal(router.show('settings-screen'), 'settings-screen');
+  assert.equal(screens[5].hasClass('hidden'), false);
+  assert.equal(screens[5].attribute('aria-hidden'), 'false');
   assert.equal(screens[0].hasClass('hidden'), true);
 });
