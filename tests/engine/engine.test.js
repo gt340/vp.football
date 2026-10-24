@@ -141,3 +141,42 @@ test('repeatability: the same seed gives an identical simulation; different seed
   assert.equal(run(123), run(123));
   assert.notEqual(run(123), run(124));
 });
+
+
+test('R1-6: forgiving ball pickup radius grants possession at the configured edge', () => {
+  const g = boot(7, { seed: 61 });
+  const result = g.run(`(() => {
+    const p = getControlled();
+    for (const other of activePlayers()) {
+      if (other.id !== p.id) { other.x = 100; other.y = 100; }
+    }
+    p.x = 900; p.y = 600;
+    state.ball.x = p.x + BALL_CONTROL_CONFIG.possessionRadius - 1;
+    state.ball.y = p.y;
+    state.ball.vx = 0; state.ball.vy = 0;
+    state.ball.ownerId = null; state.ball.aerial = false;
+    updateBallControl(1);
+    return { ownerId: state.ball.ownerId, playerId: p.id, radius: BALL_CONTROL_CONFIG.possessionRadius };
+  })()`);
+  assert.equal(result.ownerId, result.playerId);
+  assert.ok(result.radius > 20 * g.run('WORLD_RADIAL_SCALE'));
+});
+
+test('R1-6: passing is accepted near the extended mobile-friendly action range', () => {
+  const g = boot(7, { seed: 62 });
+  const result = g.run(`(() => {
+    const p = getControlled();
+    const mates = state.homePlayers.filter(v => v.id !== p.id && !v.discipline.sentOff);
+    for (const other of mates) { other.x = 100; other.y = 100; }
+    const target = mates[0];
+    p.x = 500; p.y = 500; p.facing = 0; p.cooldown = 0;
+    target.x = 800; target.y = 500;
+    state.ball.x = p.x + p.r + state.ball.r + PLAYER_CONFIG.passRange - 1;
+    state.ball.y = p.y; state.ball.vx = 0; state.ball.vy = 0;
+    state.ball.ownerId = p.id;
+    doPass(p, false, false);
+    return { cooldown: p.cooldown, expected: PLAYER_CONFIG.passCooldown, vx: state.ball.vx };
+  })()`);
+  assert.equal(result.cooldown, result.expected);
+  assert.ok(result.vx > 0, 'pass should propel the ball toward the teammate');
+});
