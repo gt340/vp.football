@@ -62,7 +62,7 @@ test('build:check verifies against the release record and reports which records 
   const r = build(tmp);
   assert.equal(r.code, 0, r.out);
   const summary = JSON.parse(r.out.trim().split('\n').pop());
-  assert.equal(summary.release, 'r1-3-setup-settings');
+  assert.equal(summary.release, 'r1-6-mobile-gameplay-controls');
   assert.equal(summary.matchesBaseline, false);
   assert.equal(summary.sha256, APPROVED_SHA);
   assert.equal(summary.bytes, APPROVED_BYTES);
