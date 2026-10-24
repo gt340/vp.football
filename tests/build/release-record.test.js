@@ -1,5 +1,5 @@
 'use strict';
-/* R1-0: the release record (release/release.json) versus the immutable Phase 5 baseline record
+/* R1-6: the release record (release/release.json) versus the immutable Phase 5 baseline record
  * (tests/fixtures/baseline.json). The build gates on the release record; the baseline record is pinned here. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -10,8 +10,8 @@ const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { REPO, copyRepo, node, rm } = require('./helpers');
 
-const APPROVED_SHA = '99df6469cbcd6762a74132fa3006a46b145d812479d7d1f9e9bb368567ca534f';
-const APPROVED_BYTES = 191518;
+const APPROVED_SHA = '59c7c22a37e79a9b7b48abe8a9305663b20f61c691402c4610711c8fbee334b5';
+const APPROVED_BYTES = 194859;
 // The original baseline record, pinned byte for byte. Changing tests/fixtures/baseline.json must fail this test.
 const BASELINE_RECORD_FILE_SHA256 = 'a5318a7a292995e0c625cbe0c89fdb6b61cc7d41c71edcb04bf558357f9b8166';
 const BASELINE_RECORD_FILE_BYTES = 451;
@@ -24,11 +24,11 @@ const flipHex = (h) => (h[0] === '0' ? '1' : '0') + h.slice(1);
 function withCopy(fn) { const tmp = copyRepo(); try { return fn(tmp); } finally { rm(tmp); } }
 function build(tmp, args = ['--check']) { return node('scripts/build.js', args, tmp); }
 
-test('release record identifies the current R1-2 artifact (sha256, bytes, name, kind)', () => {
+test('release record identifies the current R1-6 artifact (sha256, bytes, name, kind)', () => {
   const r = readJson(REPO, 'release/release.json');
   assert.equal(r.recordVersion, 1);
   assert.equal(r.kind, 'release');
-  assert.equal(r.name, 'r1-3-setup-settings');
+  assert.equal(r.name, 'r1-6-mobile-gameplay-controls');
   assert.equal(r.artifact.path, 'football-game.html');
   assert.equal(r.artifact.sha256, APPROVED_SHA);
   assert.equal(r.artifact.bytes, APPROVED_BYTES);
